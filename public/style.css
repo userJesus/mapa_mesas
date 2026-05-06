@@ -160,6 +160,29 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 #map-container .table-group:not(.available) { cursor: not-allowed; }
 #map-container .table-group .label rect { transition: filter 0.15s; }
 
+/* Modo Reposicionar */
+body.edit-mode #map-container { outline: 3px dashed #c9a06b; outline-offset: -3px; border-radius: 8px; }
+body.edit-mode #map-container .table-group { cursor: grab !important; }
+body.edit-mode #map-container .table-group.dragging { cursor: grabbing !important; }
+body.edit-mode #map-container .table-group:hover use { filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.7)); }
+body.edit-mode #map-container .table-group.dragging use { filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.9)); }
+
+.edit-card #edit-help { font-size: 12px; color: var(--ink-soft); margin-bottom: 10px; line-height: 1.4; }
+.edit-card button { margin-top: 8px; }
+.edit-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-soft); margin-top: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.edit-field select, .edit-field input {
+  font-family: inherit; font-size: 14px; font-weight: 500;
+  padding: 8px 10px; border: 1.5px solid rgba(60,40,20,0.2);
+  border-radius: 6px; background: #fff; color: var(--ink);
+  text-transform: none; letter-spacing: 0;
+}
+.edit-field select:focus, .edit-field input:focus { outline: none; border-color: var(--gold); }
+.edit-dimensions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn-secondary { background: transparent !important; color: var(--wood-dark) !important; border: 1.5px solid var(--wood-dark) !important; }
+.btn-secondary:hover:not(:disabled) { background: rgba(60,40,20,0.08) !important; }
+#edit-save-btn { background: #15803d; }
+#edit-save-btn:hover:not(:disabled) { background: #166534; }
+
 @media (max-width: 1100px) {
   main { grid-template-columns: 1fr; }
 }

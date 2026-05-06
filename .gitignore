@@ -3,7 +3,9 @@ data/
 *.log
 .env
 .env.*
-preview.svg
+preview.*
+preview-*.*
+s3-*.*
 .DS_Store
 Thumbs.db
 .vscode/

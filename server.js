@@ -19,93 +19,108 @@ const STATE_FILE = path.join(DATA_DIR, 'selections.json');
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 }
-
 function loadState() {
   try {
     ensureDataDir();
     if (fs.existsSync(STATE_FILE)) {
-      const raw = fs.readFileSync(STATE_FILE, 'utf8');
-      const data = JSON.parse(raw);
+      const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
       return {
         currentSelection: data.currentSelection ?? null,
-        tableStatus: data.tableStatus ?? {},
+        tableState: data.tableState ?? {},
         history: Array.isArray(data.history) ? data.history : [],
       };
     }
-  } catch (e) {
-    console.error('Erro ao carregar estado:', e.message);
-  }
-  return { currentSelection: null, tableStatus: {}, history: [] };
+  } catch (e) { console.error('Erro ao carregar estado:', e.message); }
+  return { currentSelection: null, tableState: {}, history: [] };
 }
-
 function saveState() {
   try {
     ensureDataDir();
-    const tableStatus = {};
-    for (const t of tables) tableStatus[t.id] = t.status;
-    fs.writeFileSync(STATE_FILE, JSON.stringify({ currentSelection, tableStatus, history }, null, 2));
-  } catch (e) {
-    console.error('Erro ao salvar estado:', e.message);
-  }
+    const tableState = {};
+    for (const t of tables) tableState[t.id] = { status: t.status, x: t.x, y: t.y, scaleX: t.scaleX ?? 1, scaleY: t.scaleY ?? 1 };
+    fs.writeFileSync(STATE_FILE, JSON.stringify({ currentSelection, tableState, history }, null, 2));
+  } catch (e) { console.error('Erro ao salvar estado:', e.message); }
 }
 
-// ---------- Dados ----------
-const tables = [
-  // parede esquerda
-  { id: 1,  shape: 'round',  seats: 2, area: 'salao', x: 130,  y: 380, status: 'available' },
-  { id: 2,  shape: 'round',  seats: 2, area: 'salao', x: 130,  y: 510, status: 'available' },
-  { id: 3,  shape: 'round',  seats: 2, area: 'salao', x: 130,  y: 640, status: 'available' },
-  { id: 4,  shape: 'square', seats: 4, area: 'salao', x: 130,  y: 770, status: 'available' },
-  // topo central
-  { id: 5,  shape: 'square', seats: 4, area: 'salao', x: 380,  y: 380, status: 'available' },
-  { id: 6,  shape: 'square', seats: 4, area: 'salao', x: 580,  y: 380, status: 'available' },
-  { id: 7,  shape: 'round',  seats: 4, area: 'salao', x: 800,  y: 380, status: 'available' },
-  // parede direita
-  { id: 8,  shape: 'square', seats: 4, area: 'salao', x: 1180, y: 380, status: 'available' },
-  { id: 9,  shape: 'round',  seats: 4, area: 'salao', x: 1180, y: 510, status: 'available' },
-  { id: 10, shape: 'square', seats: 4, area: 'salao', x: 1180, y: 640, status: 'available' },
-  { id: 11, shape: 'round',  seats: 4, area: 'salao', x: 1180, y: 770, status: 'available' },
-  // centro
-  { id: 12, shape: 'rect',   seats: 6, area: 'salao', x: 430,  y: 555, status: 'available' },
-  { id: 13, shape: 'rect',   seats: 8, area: 'salao', x: 820,  y: 555, status: 'available' },
-  // centro inferior
-  { id: 14, shape: 'rect',   seats: 8, area: 'salao', x: 430,  y: 760, status: 'available' },
-  { id: 15, shape: 'rect',   seats: 8, area: 'salao', x: 820,  y: 760, status: 'available' },
-];
+// ---------- Assets (planta + mesas) ----------
+const ASSETS_DIR = path.join(__dirname, 'assets');
+const MESAS_DIR = path.join(ASSETS_DIR, 'mesas');
 
-const TABLE_LAYOUTS = {
-  round_2:  { shape: 'round', r: 22, chairs: [
-    { x: 0, y: -32, r: 0 }, { x: 0, y: 32, r: 180 },
-  ]},
-  round_4:  { shape: 'round', r: 30, chairs: [
-    { x: 0, y: -42, r: 0 }, { x: 0, y: 42, r: 180 },
-    { x: -42, y: 0, r: 270 }, { x: 42, y: 0, r: 90 },
-  ]},
-  square_4: { shape: 'rect', w: 65, h: 65, chairs: [
-    { x: 0, y: -45, r: 0 }, { x: 0, y: 45, r: 180 },
-    { x: -45, y: 0, r: 270 }, { x: 45, y: 0, r: 90 },
-  ]},
-  rect_6:   { shape: 'rect', w: 130, h: 65, chairs: [
-    { x: -35, y: -45, r: 0 }, { x: 35, y: -45, r: 0 },
-    { x: -35, y: 45, r: 180 }, { x: 35, y: 45, r: 180 },
-    { x: -78, y: 0, r: 270 }, { x: 78, y: 0, r: 90 },
-  ]},
-  rect_8:   { shape: 'rect', w: 200, h: 65, chairs: [
-    { x: -70, y: -45, r: 0 }, { x: -23, y: -45, r: 0 },
-    { x: 23, y: -45, r: 0 }, { x: 70, y: -45, r: 0 },
-    { x: -70, y: 45, r: 180 }, { x: -23, y: 45, r: 180 },
-    { x: 23, y: 45, r: 180 }, { x: 70, y: 45, r: 180 },
-  ]},
+const mesaImages = {};
+for (const n of [1, 2, 3, 4, 5]) {
+  const f = path.join(MESAS_DIR, `${n}.png`);
+  if (fs.existsSync(f)) mesaImages[n] = fs.readFileSync(f).toString('base64');
+}
+
+let plantaB64 = null, plantaMime = null;
+const plantaPng = path.join(ASSETS_DIR, 'planta.png');
+const plantaJpg = path.join(ASSETS_DIR, 'planta.jpg');
+if (fs.existsSync(plantaPng))      { plantaB64 = fs.readFileSync(plantaPng).toString('base64'); plantaMime = 'image/png'; }
+else if (fs.existsSync(plantaJpg)) { plantaB64 = fs.readFileSync(plantaJpg).toString('base64'); plantaMime = 'image/jpeg'; }
+console.log(plantaB64 ? `Planta carregada (${plantaMime})` : 'AVISO: assets/planta.png não encontrada, usando fundo simples');
+
+// ---------- Layout ----------
+const CANVAS_W = 1448, CANVAS_H = 1086;
+
+// img: número do PNG em assets/mesas/   |   w/h: tamanho de renderização em coords do canvas
+const MESA_TYPES = {
+  round_2:  { img: 1, w: 150, h: 95 },
+  round_4:  { img: 2, w: 130, h: 130 },
+  square_4: { img: 5, w: 125, h: 125 },
+  rect_6:   { img: 3, w: 215, h: 145 },
+  rect_8:   { img: 4, w: 265, h: 170 },
 };
 
 const layoutKey = t => `${t.shape}_${t.seats}`;
 
+// Posições (centros) baseadas na referência enviada
+const tables = [
+  // parede esquerda
+  { id: 1,  shape: 'round',  seats: 2, area: 'salao',   x: 215,  y: 320, status: 'available' },
+  { id: 2,  shape: 'round',  seats: 2, area: 'salao',   x: 215,  y: 440, status: 'available' },
+  { id: 3,  shape: 'round',  seats: 2, area: 'salao',   x: 215,  y: 555, status: 'available' },
+  { id: 4,  shape: 'square', seats: 4, area: 'salao',   x: 215,  y: 680, status: 'available' },
+  // topo central
+  { id: 5,  shape: 'square', seats: 4, area: 'salao',   x: 510,  y: 320, status: 'available' },
+  { id: 6,  shape: 'square', seats: 4, area: 'salao',   x: 660,  y: 320, status: 'available' },
+  { id: 7,  shape: 'round',  seats: 4, area: 'salao',   x: 860,  y: 320, status: 'available' },
+  // parede direita
+  { id: 8,  shape: 'square', seats: 4, area: 'salao',   x: 1100, y: 320, status: 'available' },
+  { id: 9,  shape: 'round',  seats: 4, area: 'salao',   x: 1100, y: 475, status: 'available' },
+  { id: 10, shape: 'square', seats: 4, area: 'salao',   x: 1100, y: 610, status: 'available' },
+  { id: 11, shape: 'round',  seats: 4, area: 'salao',   x: 1100, y: 755, status: 'available' },
+  // centro
+  { id: 12, shape: 'rect',   seats: 6, area: 'salao',   x: 535,  y: 535, status: 'available' },
+  { id: 13, shape: 'rect',   seats: 8, area: 'salao',   x: 805,  y: 535, status: 'available' },
+  { id: 14, shape: 'rect',   seats: 8, area: 'salao',   x: 535,  y: 705, status: 'available' },
+  { id: 15, shape: 'rect',   seats: 8, area: 'salao',   x: 805,  y: 705, status: 'available' },
+  // entrada
+  { id: 16, shape: 'round',  seats: 4, area: 'salao',   x: 660,  y: 810, status: 'available' },
+  // varandas (esquerda + direita) - dentro dos decks
+  { id: 17, shape: 'round',  seats: 4, area: 'varanda', x: 180,  y: 935, status: 'available' },
+  { id: 18, shape: 'round',  seats: 4, area: 'varanda', x: 365,  y: 935, status: 'available' },
+  { id: 19, shape: 'round',  seats: 4, area: 'varanda', x: 905,  y: 905, status: 'available' },
+  { id: 20, shape: 'round',  seats: 4, area: 'varanda', x: 1090, y: 905, status: 'available' },
+];
+
+// Aplica overrides persistidos (status + posicionamento)
 const initial = loadState();
 let currentSelection = initial.currentSelection;
 let history = initial.history;
-for (const [id, status] of Object.entries(initial.tableStatus)) {
+for (const [id, st] of Object.entries(initial.tableState)) {
   const t = tables.find(t => t.id === Number(id));
-  if (t && (status === 'available' || status === 'occupied' || status === 'reserved')) t.status = status;
+  if (!t) continue;
+  if (typeof st === 'string') {
+    if (['available', 'occupied', 'reserved'].includes(st)) t.status = st;
+  } else if (st && typeof st === 'object') {
+    if (typeof st.status === 'string' && ['available', 'occupied', 'reserved'].includes(st.status)) t.status = st.status;
+    if (typeof st.x === 'number') t.x = st.x;
+    if (typeof st.y === 'number') t.y = st.y;
+    // Backward compat: scale uniforme antigo vira scaleX/scaleY
+    if (typeof st.scale === 'number' && st.scale > 0) { t.scaleX = st.scale; t.scaleY = st.scale; }
+    if (typeof st.scaleX === 'number' && st.scaleX > 0) t.scaleX = st.scaleX;
+    if (typeof st.scaleY === 'number' && st.scaleY > 0) t.scaleY = st.scaleY;
+  }
 }
 
 // ---------- API JSON ----------
@@ -141,159 +156,79 @@ app.delete('/api/tables/select', (req, res) => {
   res.json({ message: `Mesa ${requested} liberada`, table });
 });
 
-app.get('/api/tables/history', (req, res) => {
-  res.json({ history });
+app.get('/api/tables/history', (req, res) => res.json({ history }));
+
+app.post('/api/tables/reset', (req, res) => {
+  const released = [];
+  for (const t of tables) {
+    if (t.status !== 'available') {
+      released.push(t.id);
+      t.status = 'available';
+    }
+  }
+  const hadSelection = !!currentSelection;
+  currentSelection = null;
+  if (released.length || hadSelection) {
+    history.push({ action: 'reset', tableIds: released, resetAt: new Date().toISOString() });
+  }
+  saveState();
+  res.json({ message: `${released.length} mesa(s) liberada(s)`, released });
 });
 
-// ---------- SVG: defs ----------
-const SVG_DEFS = `
-<defs>
-  <linearGradient id="woodGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-    <stop offset="0%" stop-color="#8a5a30"/>
-    <stop offset="40%" stop-color="#5d3a1f"/>
-    <stop offset="60%" stop-color="#5d3a1f"/>
-    <stop offset="100%" stop-color="#8a5a30"/>
-  </linearGradient>
-  <radialGradient id="woodRound" cx="50%" cy="50%" r="55%">
-    <stop offset="0%" stop-color="#9a6a3c"/>
-    <stop offset="100%" stop-color="#5d3a1f"/>
-  </radialGradient>
-  <linearGradient id="counterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-    <stop offset="0%" stop-color="#8a5a30"/>
-    <stop offset="100%" stop-color="#5d3a1f"/>
-  </linearGradient>
-  <pattern id="floorTile" x="0" y="0" width="80" height="80" patternUnits="userSpaceOnUse">
-    <rect width="80" height="80" fill="#f0e0c2"/>
-    <path d="M0 0 L80 0 M0 80 L80 80 M0 0 L0 80 M80 0 L80 80" stroke="#dcc89e" stroke-width="0.6" opacity="0.6"/>
-  </pattern>
-  <pattern id="kitchenTile" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-    <rect width="40" height="40" fill="#e8e8e3"/>
-    <path d="M0 40 L40 40 M40 0 L40 40" stroke="#c0c0b8" stroke-width="0.8"/>
-  </pattern>
-  <pattern id="varandaWood" x="0" y="0" width="20" height="120" patternUnits="userSpaceOnUse">
-    <rect width="20" height="120" fill="#c9a66a"/>
-    <path d="M20 0 L20 120" stroke="#8a6a3a" stroke-width="0.8"/>
-  </pattern>
-</defs>`;
+app.put('/api/tables/positions', (req, res) => {
+  const positions = req.body?.positions;
+  if (!Array.isArray(positions)) return res.status(400).json({ error: 'positions deve ser um array de {id, x?, y?, scaleX?, scaleY?, scale?}' });
+  const clamp = v => Math.max(0.2, Math.min(4, v));
+  const updated = [];
+  for (const p of positions) {
+    const t = tables.find(t => t.id === p.id);
+    if (!t) continue;
+    if (Number.isFinite(p.x)) t.x = Math.round(p.x);
+    if (Number.isFinite(p.y)) t.y = Math.round(p.y);
+    if (Number.isFinite(p.scale) && p.scale > 0) { t.scaleX = clamp(p.scale); t.scaleY = clamp(p.scale); }
+    if (Number.isFinite(p.scaleX) && p.scaleX > 0) t.scaleX = clamp(p.scaleX);
+    if (Number.isFinite(p.scaleY) && p.scaleY > 0) t.scaleY = clamp(p.scaleY);
+    updated.push({ id: t.id, x: t.x, y: t.y, scaleX: t.scaleX ?? 1, scaleY: t.scaleY ?? 1 });
+  }
+  saveState();
+  res.json({ message: 'Posições salvas', updated });
+});
 
-// ---------- SVG: cadeira / mesa / planta ----------
-function chairSvg(c) {
-  return `<g transform="translate(${c.x}, ${c.y}) rotate(${c.r})">
-    <path d="M -12 -7 Q -15 -15 -7 -15 L 7 -15 Q 15 -15 12 -7" fill="none" stroke="#3d2810" stroke-width="5" stroke-linecap="round"/>
-    <rect x="-12" y="-9" width="24" height="16" rx="4" fill="#8b5a3c" stroke="#3d2810" stroke-width="1.2"/>
-  </g>`;
+// ---------- SVG ----------
+function defs() {
+  return `<defs>${Object.entries(mesaImages).map(([n, b64]) =>
+    `<symbol id="mesa${n}" viewBox="0 0 800 800"><image href="data:image/png;base64,${b64}" width="800" height="800" preserveAspectRatio="xMidYMid meet"/></symbol>`
+  ).join('')}</defs>`;
 }
 
-function tableShape(layout) {
-  if (layout.shape === 'round') {
-    return `<circle r="${layout.r}" fill="url(#woodRound)" stroke="#2a1f15" stroke-width="2.5"/>`;
+function background() {
+  if (plantaB64) {
+    return `<image href="data:${plantaMime};base64,${plantaB64}" x="0" y="0" width="${CANVAS_W}" height="${CANVAS_H}" preserveAspectRatio="xMidYMid meet"/>`;
   }
-  return `<rect x="${-layout.w/2}" y="${-layout.h/2}" width="${layout.w}" height="${layout.h}" rx="3" fill="url(#woodGrad)" stroke="#2a1f15" stroke-width="2.5"/>`;
+  return `<rect x="0" y="0" width="${CANVAS_W}" height="${CANVAS_H}" fill="#f0e0c2"/>
+    <text x="${CANVAS_W / 2}" y="${CANVAS_H / 2}" text-anchor="middle" font-family="Roboto, Arial, sans-serif" font-size="22" fill="#a0907a">Salve a planta em assets/planta.png</text>`;
 }
 
 function tableSvg(t) {
-  const layout = TABLE_LAYOUTS[layoutKey(t)];
-  if (!layout) return '';
-  const statusColors = { available: '#22c55e', occupied: '#ef4444', reserved: '#f59e0b' };
-  const opacity = t.status === 'available' ? 1 : 0.55;
-  const chairs = layout.chairs.map(chairSvg).join('');
-
-  return `<g class="table-group ${t.status}" data-table-id="${t.id}" transform="translate(${t.x}, ${t.y})" opacity="${opacity}">
-    ${chairs}
-    ${tableShape(layout)}
-    <g class="label">
-      <rect x="-34" y="-11" width="68" height="22" rx="11" fill="#fdf6e3" stroke="#2a1f15" stroke-width="1.2"/>
-      <circle cx="-23" cy="0" r="4.5" fill="${statusColors[t.status]}" stroke="#2a1f15" stroke-width="0.8"/>
-      <text x="6" y="4" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#2a1f15">Mesa ${t.id}</text>
-    </g>
+  const layout = MESA_TYPES[layoutKey(t)];
+  if (!layout || !mesaImages[layout.img]) return '';
+  const opacity = t.status === 'available' ? 1 : 0.4;
+  const labelColor = t.status === 'available' ? '#1c1917' : '#dc2626';
+  const sx = t.scaleX ?? 1;
+  const sy = t.scaleY ?? 1;
+  const scalePart = (sx === 1 && sy === 1) ? '' : ` scale(${sx}, ${sy})`;
+  return `<g class="table-group ${t.status}" data-table-id="${t.id}" data-base-w="${layout.w}" data-base-h="${layout.h}" transform="translate(${t.x}, ${t.y})${scalePart}">
+    <use href="#mesa${layout.img}" x="${-layout.w / 2}" y="${-layout.h / 2}" width="${layout.w}" height="${layout.h}" opacity="${opacity}"/>
+    <text x="0" y="5" text-anchor="middle" font-family="Roboto, Arial, sans-serif" font-size="15" font-weight="700" fill="${labelColor}" stroke="#fdf6e3" stroke-width="3.5" paint-order="stroke" pointer-events="none">Mesa ${t.id}</text>
   </g>`;
-}
-
-function plantSvg(x, y, scale = 1) {
-  return `<g transform="translate(${x}, ${y}) scale(${scale})">
-    <path d="M -11 -1 L 11 -1 L 9 12 L -9 12 Z" fill="#6b4423" stroke="#3d2810" stroke-width="1"/>
-    <ellipse cx="-7" cy="-6" rx="9" ry="11" fill="#3d7a3a"/>
-    <ellipse cx="7" cy="-6" rx="9" ry="11" fill="#4a8e44"/>
-    <ellipse cx="0" cy="-12" rx="10" ry="11" fill="#5cab58"/>
-    <ellipse cx="-3" cy="-15" rx="6" ry="7" fill="#6dba68"/>
-    <ellipse cx="4" cy="-14" rx="6" ry="7" fill="#7dca78"/>
-  </g>`;
-}
-
-// ---------- SVG: cenário estático ----------
-function staticBg() {
-  return `
-  <!-- piso -->
-  <rect x="0" y="0" width="1300" height="1000" fill="url(#floorTile)"/>
-
-  <!-- parede externa -->
-  <rect x="20" y="20" width="1260" height="960" fill="none" stroke="#2a1f15" stroke-width="9"/>
-
-  <!-- COZINHA -->
-  <rect x="60" y="60" width="700" height="200" fill="url(#kitchenTile)" stroke="#2a1f15" stroke-width="3"/>
-  <text x="410" y="175" text-anchor="middle" font-family="Arial" font-size="28" font-weight="800" fill="#3d2810" letter-spacing="4">COZINHA</text>
-  <rect x="80"  y="80" width="60" height="34" fill="#9a9890" stroke="#5a5852"/>
-  <rect x="150" y="80" width="60" height="34" fill="#7a7872" stroke="#5a5852"/>
-  <rect x="220" y="80" width="90" height="34" fill="#9a9890" stroke="#5a5852"/>
-  <rect x="320" y="80" width="60" height="34" fill="#7a7872" stroke="#5a5852"/>
-  <rect x="560" y="80" width="60" height="34" fill="#7a7872" stroke="#5a5852"/>
-  <rect x="630" y="80" width="80" height="34" fill="#9a9890" stroke="#5a5852"/>
-  <line x1="80" y1="240" x2="740" y2="240" stroke="#5a5852" stroke-width="2"/>
-
-  <!-- CÂMARA FRIA / DESPENSA -->
-  <rect x="760" y="60"  width="140" height="100" fill="#dde4ed" stroke="#2a1f15" stroke-width="2.5"/>
-  <text x="830" y="105" text-anchor="middle" font-family="Arial" font-size="12" font-weight="700" fill="#3d2810">CÂMARA</text>
-  <text x="830" y="123" text-anchor="middle" font-family="Arial" font-size="12" font-weight="700" fill="#3d2810">FRIA</text>
-  <rect x="760" y="160" width="140" height="100" fill="#e8e0d3" stroke="#2a1f15" stroke-width="2.5"/>
-  <text x="830" y="215" text-anchor="middle" font-family="Arial" font-size="13" font-weight="700" fill="#3d2810">DESPENSA</text>
-
-  <!-- BANHEIROS -->
-  <rect x="900" y="60"  width="340" height="95" fill="#dde4ed" stroke="#2a1f15" stroke-width="2.5"/>
-  <text x="1070" y="113" text-anchor="middle" font-family="Arial" font-size="14" font-weight="700" fill="#3d2810" letter-spacing="1.5">BANHEIRO MASCULINO</text>
-  <rect x="900" y="155" width="340" height="105" fill="#dde4ed" stroke="#2a1f15" stroke-width="2.5"/>
-  <text x="1070" y="213" text-anchor="middle" font-family="Arial" font-size="14" font-weight="700" fill="#3d2810" letter-spacing="1.5">BANHEIRO FEMININO</text>
-
-  <!-- CAIXA / BALCÃO -->
-  <rect x="60" y="270" width="260" height="38" fill="url(#counterGrad)" stroke="#2a1f15" stroke-width="2"/>
-  <text x="190" y="295" text-anchor="middle" font-family="Arial" font-size="13" font-weight="800" fill="#fdf6e3" letter-spacing="2.5">CAIXA / BALCÃO</text>
-
-  <!-- Título do salão (watermark) -->
-  <text x="660" y="470" text-anchor="middle" font-family="Arial" font-size="15" font-weight="600" fill="#8b6c45" letter-spacing="6" opacity="0.55">SALÃO PRINCIPAL</text>
-
-  <!-- VARANDA esquerda -->
-  <rect x="60" y="850" width="500" height="130" fill="url(#varandaWood)" stroke="#2a1f15" stroke-width="2.5"/>
-  <text x="310" y="975" text-anchor="middle" font-family="Arial" font-size="14" font-weight="800" fill="#3d2810" letter-spacing="4">VARANDA</text>
-
-  <!-- VARANDA direita -->
-  <rect x="780" y="850" width="460" height="130" fill="url(#varandaWood)" stroke="#2a1f15" stroke-width="2.5"/>
-  <text x="1010" y="975" text-anchor="middle" font-family="Arial" font-size="14" font-weight="800" fill="#3d2810" letter-spacing="4">VARANDA</text>
-
-  <!-- ENTRADA -->
-  <rect x="560" y="900" width="220" height="80" fill="#a8c87a" stroke="#2a1f15" stroke-width="2.5"/>
-  <text x="670" y="935" text-anchor="middle" font-family="Arial" font-size="14" font-weight="800" fill="#1a2e05" letter-spacing="2">ENTRADA</text>
-  <text x="670" y="958" text-anchor="middle" font-family="Arial" font-size="11" font-weight="600" fill="#1a2e05" letter-spacing="2">RECEPÇÃO</text>
-
-  <!-- Plantas decorativas -->
-  ${plantSvg(50,  335)}
-  ${plantSvg(50,  830, 1.1)}
-  ${plantSvg(1255, 335)}
-  ${plantSvg(1255, 830, 1.1)}
-  ${plantSvg(80,  880, 0.9)}
-  ${plantSvg(540, 880, 0.9)}
-  ${plantSvg(800, 880, 0.9)}
-  ${plantSvg(1220, 880, 0.9)}
-  ${plantSvg(220, 960, 0.75)}
-  ${plantSvg(1100, 960, 0.75)}
-  `;
 }
 
 function fullSvg() {
-  const tablesSvg = tables.map(tableSvg).join('');
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="1000" viewBox="0 0 1300 1000" preserveAspectRatio="xMidYMid meet">
-  ${SVG_DEFS}
-  ${staticBg()}
-  <g id="tables-layer">${tablesSvg}</g>
+<svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_W}" height="${CANVAS_H}" viewBox="0 0 ${CANVAS_W} ${CANVAS_H}" preserveAspectRatio="xMidYMid meet">
+${defs()}
+${background()}
+<g id="tables-layer">${tables.map(tableSvg).join('')}</g>
 </svg>`;
 }
 
@@ -303,17 +238,12 @@ app.get('/api/tables/image', (req, res) => {
 });
 
 const FONT_DIR = path.join(__dirname, 'fonts');
-
 function renderRaster(req) {
-  const width = Math.min(Math.max(parseInt(req.query.width, 10) || 1300, 200), 4000);
+  const width = Math.min(Math.max(parseInt(req.query.width, 10) || CANVAS_W, 200), 4000);
   return new Resvg(fullSvg(), {
     background: '#f0e0c2',
     fitTo: { mode: 'width', value: width },
-    font: {
-      fontDirs: [FONT_DIR],
-      loadSystemFonts: false,
-      defaultFontFamily: 'Roboto',
-    },
+    font: { fontDirs: [FONT_DIR], loadSystemFonts: false, defaultFontFamily: 'Roboto' },
   }).render();
 }
 
@@ -333,11 +263,8 @@ app.get('/api/tables/image.png', (req, res) => {
 app.get(['/api/tables/image.jpeg', '/api/tables/image.jpg'], (req, res) => {
   try {
     const quality = Math.min(Math.max(parseInt(req.query.quality, 10) || 88, 30), 100);
-    const rendered = renderRaster(req);
-    const jpeg = jpegJs.encode(
-      { data: rendered.pixels, width: rendered.width, height: rendered.height },
-      quality
-    );
+    const r = renderRaster(req);
+    const jpeg = jpegJs.encode({ data: r.pixels, width: r.width, height: r.height }, quality);
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Content-Disposition', 'inline; filename="planta-mesas.jpeg"');
     res.setHeader('Cache-Control', 'no-store');

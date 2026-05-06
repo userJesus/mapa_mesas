@@ -29,6 +29,32 @@
         <button id="clear-btn" disabled>Liberar mesa</button>
       </div>
 
+      <div class="card edit-card">
+        <h2>Modo Reposicionar</h2>
+        <p id="edit-help">Arraste para mover. Selecione uma mesa abaixo para editar largura/altura.</p>
+        <div id="edit-buttons-idle">
+          <button id="edit-toggle-btn" class="btn-secondary">Entrar no modo</button>
+        </div>
+        <div id="edit-buttons-active" hidden>
+          <label class="edit-field">
+            Mesa:
+            <select id="edit-table-select"></select>
+          </label>
+          <div class="edit-dimensions">
+            <label class="edit-field">
+              Largura
+              <input id="edit-width" type="number" min="20" max="800" step="1">
+            </label>
+            <label class="edit-field">
+              Altura
+              <input id="edit-height" type="number" min="20" max="800" step="1">
+            </label>
+          </div>
+          <button id="edit-save-btn">Salvar alterações</button>
+          <button id="edit-cancel-btn" class="btn-secondary">Cancelar</button>
+        </div>
+      </div>
+
       <div class="card">
         <h2>Status</h2>
         <ul class="legend">

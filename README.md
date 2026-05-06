@@ -38,6 +38,8 @@ Base URL: `http://localhost:3000` (em produção, a URL pública do Railway).
 | GET    | `/api/tables/history`    | Retorna o histórico de seleções |
 | POST   | `/api/tables/select`     | Reserva e **bloqueia** uma mesa |
 | DELETE | `/api/tables/select`     | **Libera** uma mesa bloqueada |
+| POST   | `/api/tables/reset`      | **Libera todas** as mesas e limpa a seleção |
+| PUT    | `/api/tables/positions`  | Atualiza posição/escala (`x`, `y`, `scaleX`, `scaleY`) |
 
 ### `GET /api/tables`
 
@@ -181,6 +183,36 @@ Erros:
 - `400` — nenhum `tableId` informado e não há `currentSelection`
 - `404` — mesa não existe
 - `409` — mesa já está disponível
+
+### `POST /api/tables/reset`
+
+Libera **todas** as mesas (status volta para `available`) e limpa
+`currentSelection`. Registra a ação no histórico.
+
+Resposta `200`:
+```json
+{ "message": "3 mesa(s) liberada(s)", "released": [5, 9, 14] }
+```
+
+```bash
+curl -X POST https://SEU-APP.up.railway.app/api/tables/reset
+```
+
+### `PUT /api/tables/positions`
+
+Atualiza posição (`x`, `y`) e/ou escala (`scaleX`, `scaleY` ou `scale`
+uniforme) de uma ou mais mesas. Usado pelo modo Reposicionar do
+front-end (drag-and-drop + inputs de largura/altura).
+
+Body JSON: `{ "positions": [ { "id": <number>, "x"?, "y"?, "scaleX"?, "scaleY"?, "scale"? } ] }`
+
+Limites: `scaleX`/`scaleY`/`scale` entre `0.2` e `4`.
+
+```bash
+curl -X PUT https://SEU-APP.up.railway.app/api/tables/positions \
+  -H "Content-Type: application/json" \
+  -d '{"positions":[{"id":12,"x":600,"y":540,"scaleX":1.5,"scaleY":1}]}'
+```
 
 ### `GET /api/tables/history`
 
