@@ -31,11 +31,12 @@ Base URL: `http://localhost:3000` (em produção, a URL pública do Railway).
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| GET    | `/api/tables`         | Lista todas as mesas e a seleção atual |
-| GET    | `/api/tables/image`   | Retorna a planta completa em SVG (imagem) |
-| GET    | `/api/tables/history` | Retorna o histórico de seleções |
-| POST   | `/api/tables/select`  | Seleciona uma mesa |
-| DELETE | `/api/tables/select`  | Limpa a seleção atual |
+| GET    | `/api/tables`            | Lista todas as mesas e a seleção atual |
+| GET    | `/api/tables/image`      | Retorna a planta completa em SVG |
+| GET    | `/api/tables/image.png`  | Retorna a planta como PNG (binário) |
+| GET    | `/api/tables/history`    | Retorna o histórico de seleções |
+| POST   | `/api/tables/select`     | Seleciona uma mesa |
+| DELETE | `/api/tables/select`     | Limpa a seleção atual |
 
 ### `GET /api/tables`
 
@@ -73,6 +74,37 @@ Pode ser embedado direto no HTML:
 
 ```html
 <img src="https://SEU-APP.up.railway.app/api/tables/image" alt="Planta">
+```
+
+### `GET /api/tables/image.png`
+
+Retorna a mesma planta renderizada como **PNG** (binário). Use este endpoint
+quando precisar de um arquivo de imagem (ex.: upload em S3, anexo em e-mail).
+
+Query string opcional:
+- `width` — largura em pixels (default `1300`, mín `200`, máx `4000`).
+  A altura é proporcional. Aumente para mais nitidez em impressão.
+
+`Content-Type: image/png` · `Content-Disposition: inline; filename="planta-mesas.png"`
+
+```bash
+curl https://SEU-APP.up.railway.app/api/tables/image.png -o planta.png
+curl "https://SEU-APP.up.railway.app/api/tables/image.png?width=2400" -o planta-hd.png
+```
+
+Upload direto para S3 (Node.js, AWS SDK v3):
+
+```js
+const png = await fetch(`${API}/api/tables/image.png?width=2000`)
+  .then(r => r.arrayBuffer())
+  .then(b => Buffer.from(b));
+
+await s3.send(new PutObjectCommand({
+  Bucket: 'meu-bucket',
+  Key: `planta-${Date.now()}.png`,
+  Body: png,
+  ContentType: 'image/png',
+}));
 ```
 
 ### `POST /api/tables/select`

@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const { Resvg } = require('@resvg/resvg-js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -293,6 +294,24 @@ function fullSvg() {
 app.get('/api/tables/image', (req, res) => {
   res.setHeader('Content-Type', 'image/svg+xml');
   res.send(fullSvg());
+});
+
+app.get('/api/tables/image.png', (req, res) => {
+  try {
+    const width = Math.min(Math.max(parseInt(req.query.width, 10) || 1300, 200), 4000);
+    const resvg = new Resvg(fullSvg(), {
+      background: '#f0e0c2',
+      fitTo: { mode: 'width', value: width },
+    });
+    const pngBuffer = resvg.render().asPng();
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', 'inline; filename="planta-mesas.png"');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(pngBuffer);
+  } catch (e) {
+    console.error('Erro ao gerar PNG:', e);
+    res.status(500).json({ error: 'Falha ao gerar PNG', detail: e.message });
+  }
 });
 
 app.listen(PORT, () => {
