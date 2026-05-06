@@ -63,7 +63,8 @@ curl https://SEU-APP.up.railway.app/api/tables
 ### `GET /api/tables/image`
 
 Retorna a planta inteira (paredes, salas, mesas, cadeiras, plantas) como SVG.
-A mesa atualmente selecionada aparece com um anel azul tracejado.
+Mesas bloqueadas (`status: occupied`) aparecem com a bolinha vermelha no
+badge e opacidade reduzida; as disponíveis ficam com a bolinha verde.
 
 `Content-Type: image/svg+xml`.
 
