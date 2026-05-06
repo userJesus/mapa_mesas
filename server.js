@@ -297,11 +297,18 @@ app.get('/api/tables/image', (req, res) => {
   res.send(fullSvg());
 });
 
+const FONT_DIR = path.join(__dirname, 'fonts');
+
 function renderRaster(req) {
   const width = Math.min(Math.max(parseInt(req.query.width, 10) || 1300, 200), 4000);
   return new Resvg(fullSvg(), {
     background: '#f0e0c2',
     fitTo: { mode: 'width', value: width },
+    font: {
+      fontDirs: [FONT_DIR],
+      loadSystemFonts: false,
+      defaultFontFamily: 'Roboto',
+    },
   }).render();
 }
 
