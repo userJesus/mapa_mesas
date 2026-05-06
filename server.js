@@ -3,6 +3,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const { Resvg } = require('@resvg/resvg-js');
+const jpegJs = require('jpeg-js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -296,21 +297,42 @@ app.get('/api/tables/image', (req, res) => {
   res.send(fullSvg());
 });
 
+function renderRaster(req) {
+  const width = Math.min(Math.max(parseInt(req.query.width, 10) || 1300, 200), 4000);
+  return new Resvg(fullSvg(), {
+    background: '#f0e0c2',
+    fitTo: { mode: 'width', value: width },
+  }).render();
+}
+
 app.get('/api/tables/image.png', (req, res) => {
   try {
-    const width = Math.min(Math.max(parseInt(req.query.width, 10) || 1300, 200), 4000);
-    const resvg = new Resvg(fullSvg(), {
-      background: '#f0e0c2',
-      fitTo: { mode: 'width', value: width },
-    });
-    const pngBuffer = resvg.render().asPng();
+    const png = renderRaster(req).asPng();
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Content-Disposition', 'inline; filename="planta-mesas.png"');
     res.setHeader('Cache-Control', 'no-store');
-    res.send(pngBuffer);
+    res.send(png);
   } catch (e) {
     console.error('Erro ao gerar PNG:', e);
     res.status(500).json({ error: 'Falha ao gerar PNG', detail: e.message });
+  }
+});
+
+app.get(['/api/tables/image.jpeg', '/api/tables/image.jpg'], (req, res) => {
+  try {
+    const quality = Math.min(Math.max(parseInt(req.query.quality, 10) || 88, 30), 100);
+    const rendered = renderRaster(req);
+    const jpeg = jpegJs.encode(
+      { data: rendered.pixels, width: rendered.width, height: rendered.height },
+      quality
+    );
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Content-Disposition', 'inline; filename="planta-mesas.jpeg"');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(jpeg.data);
+  } catch (e) {
+    console.error('Erro ao gerar JPEG:', e);
+    res.status(500).json({ error: 'Falha ao gerar JPEG', detail: e.message });
   }
 });
 

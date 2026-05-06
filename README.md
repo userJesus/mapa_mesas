@@ -34,6 +34,7 @@ Base URL: `http://localhost:3000` (em produção, a URL pública do Railway).
 | GET    | `/api/tables`            | Lista todas as mesas e a seleção atual |
 | GET    | `/api/tables/image`      | Retorna a planta completa em SVG |
 | GET    | `/api/tables/image.png`  | Retorna a planta como PNG (binário) |
+| GET    | `/api/tables/image.jpeg` | Retorna a planta como JPEG (binário) — alias `.jpg` |
 | GET    | `/api/tables/history`    | Retorna o histórico de seleções |
 | POST   | `/api/tables/select`     | Seleciona uma mesa |
 | DELETE | `/api/tables/select`     | Limpa a seleção atual |
@@ -105,6 +106,23 @@ await s3.send(new PutObjectCommand({
   Body: png,
   ContentType: 'image/png',
 }));
+```
+
+### `GET /api/tables/image.jpeg` (alias `.jpg`)
+
+Mesma planta renderizada como **JPEG** binário. Use quando o pipeline que
+consome a imagem não aceita XML/SVG (por exemplo, sistemas de upload que
+auto-convertem XML em JSON).
+
+Query string opcional:
+- `width` — largura em pixels (default `1300`, mín `200`, máx `4000`).
+- `quality` — qualidade JPEG (default `88`, mín `30`, máx `100`).
+
+`Content-Type: image/jpeg` · `Content-Disposition: inline; filename="planta-mesas.jpeg"`
+
+```bash
+curl https://SEU-APP.up.railway.app/api/tables/image.jpeg -o planta.jpeg
+curl "https://SEU-APP.up.railway.app/api/tables/image.jpeg?width=2400&quality=92" -o planta-hd.jpeg
 ```
 
 ### `POST /api/tables/select`
