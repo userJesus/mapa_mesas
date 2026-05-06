@@ -1,0 +1,165 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --wood-dark: #2a1f15;
+  --wood: #5d3a1f;
+  --wood-light: #8a5a30;
+  --gold: #c9a06b;
+  --cream: #fdf6e3;
+  --bg: #f5ebd6;
+  --ink: #2a1f15;
+  --ink-soft: #6b5a45;
+}
+
+html, body { height: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+header {
+  background: linear-gradient(135deg, #2a1f15 0%, #4a2e1a 100%);
+  color: var(--cream);
+  padding: 18px 32px;
+  border-bottom: 4px solid var(--gold);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.brand { display: flex; align-items: center; gap: 16px; }
+
+.brand-mark {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  background: var(--gold);
+  color: var(--wood-dark);
+  display: grid; place-items: center;
+  font-family: Georgia, serif;
+  font-weight: 800;
+  font-size: 22px;
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.2);
+}
+
+header h1 { font-size: 22px; font-family: Georgia, serif; letter-spacing: 0.3px; }
+header p { font-size: 13px; color: #d6c5a3; margin-top: 2px; }
+
+main {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 22px;
+  padding: 22px 28px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.floor-plan {
+  background: var(--cream);
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 4px 14px rgba(60,40,20,0.12), inset 0 0 0 1px rgba(60,40,20,0.08);
+}
+
+#map-container { width: 100%; }
+#map-container svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+}
+
+.sidebar { display: flex; flex-direction: column; gap: 14px; }
+
+.card {
+  background: var(--cream);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 2px 8px rgba(60,40,20,0.10);
+  border: 1px solid rgba(60,40,20,0.08);
+}
+
+.card h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--ink-soft);
+  margin-bottom: 12px;
+  font-weight: 700;
+}
+
+.selection-card .selection-empty { color: var(--ink-soft); font-size: 14px; padding: 8px 0; }
+.selection-card .selection-filled {
+  background: linear-gradient(135deg, #fdf6e3 0%, #f0e0c2 100%);
+  border: 1px solid var(--gold);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 14px;
+}
+.selection-card .selection-filled strong { color: var(--wood); font-size: 16px; }
+
+.legend, .types { list-style: none; }
+.legend li, .types li {
+  padding: 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.dot {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 1.2px solid var(--wood-dark);
+}
+.dot-available { background: #22c55e; }
+.dot-occupied  { background: #ef4444; }
+.dot-reserved  { background: #f59e0b; }
+.dot-selected  { background: #3b82f6; }
+
+.type-icon {
+  display: inline-block;
+  background: linear-gradient(135deg, #8a5a30, #5d3a1f, #8a5a30);
+  border: 1.2px solid var(--wood-dark);
+  flex-shrink: 0;
+}
+.type-icon.round-2  { width: 14px; height: 14px; border-radius: 50%; }
+.type-icon.round-4  { width: 18px; height: 18px; border-radius: 50%; }
+.type-icon.square-4 { width: 18px; height: 18px; border-radius: 3px; }
+.type-icon.rect-6   { width: 26px; height: 14px; border-radius: 3px; }
+.type-icon.rect-8   { width: 32px; height: 14px; border-radius: 3px; }
+
+button {
+  background: var(--wood-dark);
+  color: var(--cream);
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  width: 100%;
+  margin-top: 10px;
+  letter-spacing: 0.4px;
+}
+button:hover:not(:disabled) { background: var(--wood); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+#status-msg { font-size: 12px; color: var(--ink-soft); }
+#status-msg.error   { color: #b91c1c; }
+#status-msg.success { color: #15803d; }
+
+/* Hover/Selection nas mesas SVG (injetadas dinamicamente) */
+#map-container .table-group.available { cursor: pointer; }
+#map-container .table-group.available:hover circle[fill^="url"],
+#map-container .table-group.available:hover rect[fill^="url"] {
+  filter: brightness(1.18) drop-shadow(0 2px 4px rgba(0,0,0,0.25));
+}
+#map-container .table-group:not(.available) { cursor: not-allowed; }
+#map-container .table-group .label rect { transition: filter 0.15s; }
+
+@media (max-width: 1100px) {
+  main { grid-template-columns: 1fr; }
+}

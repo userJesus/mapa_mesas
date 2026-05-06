@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mapa de Mesas — Restaurante</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-mark">R</div>
+      <div>
+        <h1>Mapa de Mesas</h1>
+        <p>Selecione uma mesa disponível para reservar</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="floor-plan">
+      <div id="map-container"></div>
+    </section>
+
+    <aside class="sidebar">
+      <div class="card selection-card">
+        <h2>Seleção atual</h2>
+        <div id="selection-info" class="selection-empty">Nenhuma mesa selecionada</div>
+        <button id="clear-btn" disabled>Limpar seleção</button>
+      </div>
+
+      <div class="card">
+        <h2>Status</h2>
+        <ul class="legend">
+          <li><span class="dot dot-available"></span> Disponível</li>
+          <li><span class="dot dot-occupied"></span> Ocupada</li>
+          <li><span class="dot dot-reserved"></span> Reservada</li>
+          <li><span class="dot dot-selected"></span> Selecionada</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>Tipos de mesa</h2>
+        <ul class="types">
+          <li><span class="type-icon round-2"></span> Redonda · 2 lugares</li>
+          <li><span class="type-icon round-4"></span> Redonda · 4 lugares</li>
+          <li><span class="type-icon square-4"></span> Quadrada · 4 lugares</li>
+          <li><span class="type-icon rect-6"></span> Retangular · 6 lugares</li>
+          <li><span class="type-icon rect-8"></span> Retangular · 8 lugares</li>
+        </ul>
+      </div>
+
+      <div class="card status-card">
+        <h2>Sistema</h2>
+        <p id="status-msg">Carregando…</p>
+      </div>
+    </aside>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
