@@ -191,26 +191,16 @@ function tableShape(layout) {
   return `<rect x="${-layout.w/2}" y="${-layout.h/2}" width="${layout.w}" height="${layout.h}" rx="3" fill="url(#woodGrad)" stroke="#2a1f15" stroke-width="2.5"/>`;
 }
 
-function selectionRing(layout) {
-  if (layout.shape === 'round') {
-    return `<circle r="${layout.r + 7}" fill="none" stroke="#3b82f6" stroke-width="3" stroke-dasharray="5 3"/>`;
-  }
-  return `<rect x="${-layout.w/2 - 7}" y="${-layout.h/2 - 7}" width="${layout.w + 14}" height="${layout.h + 14}" rx="6" fill="none" stroke="#3b82f6" stroke-width="3" stroke-dasharray="5 3"/>`;
-}
-
-function tableSvg(t, selectedId) {
+function tableSvg(t) {
   const layout = TABLE_LAYOUTS[layoutKey(t)];
   if (!layout) return '';
-  const isSelected = selectedId === t.id;
   const statusColors = { available: '#22c55e', occupied: '#ef4444', reserved: '#f59e0b' };
-  const opacity = t.status === 'available' ? 1 : 0.6;
+  const opacity = t.status === 'available' ? 1 : 0.55;
   const chairs = layout.chairs.map(chairSvg).join('');
-  const ring = isSelected ? selectionRing(layout) : '';
 
-  return `<g class="table-group ${t.status}${isSelected ? ' selected' : ''}" data-table-id="${t.id}" transform="translate(${t.x}, ${t.y})" opacity="${opacity}">
+  return `<g class="table-group ${t.status}" data-table-id="${t.id}" transform="translate(${t.x}, ${t.y})" opacity="${opacity}">
     ${chairs}
     ${tableShape(layout)}
-    ${ring}
     <g class="label">
       <rect x="-34" y="-11" width="68" height="22" rx="11" fill="#fdf6e3" stroke="#2a1f15" stroke-width="1.2"/>
       <circle cx="-23" cy="0" r="4.5" fill="${statusColors[t.status]}" stroke="#2a1f15" stroke-width="0.8"/>
@@ -298,8 +288,7 @@ function staticBg() {
 }
 
 function fullSvg() {
-  const selectedId = currentSelection?.tableId ?? null;
-  const tablesSvg = tables.map(t => tableSvg(t, selectedId)).join('');
+  const tablesSvg = tables.map(tableSvg).join('');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1300" height="1000" viewBox="0 0 1300 1000" preserveAspectRatio="xMidYMid meet">
   ${SVG_DEFS}
