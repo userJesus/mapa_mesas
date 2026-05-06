@@ -50,17 +50,25 @@ async function selectTable(tableId) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erro');
-    setStatus(`Mesa ${tableId} selecionada`, 'success');
+    setStatus(`Mesa ${tableId} reservada e bloqueada`, 'success');
     await refreshAll();
   } catch (e) {
     setStatus(e.message, 'error');
   }
 }
 
-async function clearSelection() {
+async function releaseTable() {
+  if (!currentSelection) return;
+  const tableId = currentSelection.tableId;
   try {
-    await fetch(`${API}/tables/select`, { method: 'DELETE' });
-    setStatus('Seleção removida', 'success');
+    const res = await fetch(`${API}/tables/select`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tableId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro');
+    setStatus(`Mesa ${tableId} liberada`, 'success');
     await refreshAll();
   } catch (e) {
     setStatus(e.message, 'error');
@@ -98,5 +106,5 @@ function setStatus(msg, type = '') {
   el.className = type;
 }
 
-document.getElementById('clear-btn').addEventListener('click', clearSelection);
+document.getElementById('clear-btn').addEventListener('click', releaseTable);
 refreshAll();

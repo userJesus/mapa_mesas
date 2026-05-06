@@ -36,8 +36,8 @@ Base URL: `http://localhost:3000` (em produção, a URL pública do Railway).
 | GET    | `/api/tables/image.png`  | Retorna a planta como PNG (binário) |
 | GET    | `/api/tables/image.jpeg` | Retorna a planta como JPEG (binário) — alias `.jpg` |
 | GET    | `/api/tables/history`    | Retorna o histórico de seleções |
-| POST   | `/api/tables/select`     | Seleciona uma mesa |
-| DELETE | `/api/tables/select`     | Limpa a seleção atual |
+| POST   | `/api/tables/select`     | Reserva e **bloqueia** uma mesa |
+| DELETE | `/api/tables/select`     | **Libera** uma mesa bloqueada |
 
 ### `GET /api/tables`
 
@@ -127,22 +127,26 @@ curl "https://SEU-APP.up.railway.app/api/tables/image.jpeg?width=2400&quality=92
 
 ### `POST /api/tables/select`
 
+Reserva uma mesa e **bloqueia** seu uso (status passa para `occupied`).
+Tentativas posteriores de reservar a mesma mesa retornam `409` até ela
+ser liberada via `DELETE`.
+
 Body JSON: `{ "tableId": <number> }`
 
 Resposta `200`:
 
 ```json
 {
-  "message": "Mesa selecionada",
+  "message": "Mesa reservada e bloqueada",
   "selection": { "tableId": 12, "selectedAt": "2026-05-06T14:23:09.746Z" },
-  "table": { "id": 12, "shape": "rect", "seats": 6, "area": "salao", "x": 430, "y": 555, "status": "available" }
+  "table": { "id": 12, "shape": "rect", "seats": 6, "area": "salao", "x": 430, "y": 555, "status": "occupied" }
 }
 ```
 
 Erros:
 - `400` — `tableId` ausente ou não é número
 - `404` — mesa não existe
-- `409` — mesa não está disponível (`occupied` ou `reserved`)
+- `409` — mesa já bloqueada (`occupied` ou `reserved`)
 
 ```bash
 curl -X POST https://SEU-APP.up.railway.app/api/tables/select \
@@ -150,13 +154,32 @@ curl -X POST https://SEU-APP.up.railway.app/api/tables/select \
   -d '{"tableId": 12}'
 ```
 
+A mudança de status persiste em `data/selections.json` e sobrevive a restart.
+
 ### `DELETE /api/tables/select`
 
-Limpa a seleção atual e registra a ação no histórico.
+**Libera** uma mesa bloqueada (volta para `available`).
+
+Pode receber `tableId` no corpo, na query string, ou nada (libera a
+`currentSelection`).
 
 ```bash
+# por id (corpo)
+curl -X DELETE https://SEU-APP.up.railway.app/api/tables/select \
+  -H "Content-Type: application/json" \
+  -d '{"tableId": 12}'
+
+# por id (query string)
+curl -X DELETE "https://SEU-APP.up.railway.app/api/tables/select?tableId=12"
+
+# sem id - libera a mesa atualmente selecionada
 curl -X DELETE https://SEU-APP.up.railway.app/api/tables/select
 ```
+
+Erros:
+- `400` — nenhum `tableId` informado e não há `currentSelection`
+- `404` — mesa não existe
+- `409` — mesa já está disponível
 
 ### `GET /api/tables/history`
 

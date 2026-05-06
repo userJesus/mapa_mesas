@@ -28,19 +28,22 @@ function loadState() {
       const data = JSON.parse(raw);
       return {
         currentSelection: data.currentSelection ?? null,
+        tableStatus: data.tableStatus ?? {},
         history: Array.isArray(data.history) ? data.history : [],
       };
     }
   } catch (e) {
     console.error('Erro ao carregar estado:', e.message);
   }
-  return { currentSelection: null, history: [] };
+  return { currentSelection: null, tableStatus: {}, history: [] };
 }
 
 function saveState() {
   try {
     ensureDataDir();
-    fs.writeFileSync(STATE_FILE, JSON.stringify({ currentSelection, history }, null, 2));
+    const tableStatus = {};
+    for (const t of tables) tableStatus[t.id] = t.status;
+    fs.writeFileSync(STATE_FILE, JSON.stringify({ currentSelection, tableStatus, history }, null, 2));
   } catch (e) {
     console.error('Erro ao salvar estado:', e.message);
   }
@@ -100,6 +103,10 @@ const layoutKey = t => `${t.shape}_${t.seats}`;
 const initial = loadState();
 let currentSelection = initial.currentSelection;
 let history = initial.history;
+for (const [id, status] of Object.entries(initial.tableStatus)) {
+  const t = tables.find(t => t.id === Number(id));
+  if (t && (status === 'available' || status === 'occupied' || status === 'reserved')) t.status = status;
+}
 
 // ---------- API JSON ----------
 app.get('/api/tables', (req, res) => {
@@ -111,18 +118,27 @@ app.post('/api/tables/select', (req, res) => {
   if (typeof tableId !== 'number') return res.status(400).json({ error: 'tableId (number) é obrigatório' });
   const table = tables.find(t => t.id === tableId);
   if (!table) return res.status(404).json({ error: `Mesa ${tableId} não encontrada` });
-  if (table.status !== 'available') return res.status(409).json({ error: `Mesa ${tableId} não está disponível (status: ${table.status})` });
+  if (table.status !== 'available') return res.status(409).json({ error: `Mesa ${tableId} já está bloqueada (status: ${table.status})` });
+  table.status = 'occupied';
   currentSelection = { tableId, selectedAt: new Date().toISOString() };
   history.push({ ...currentSelection, action: 'select' });
   saveState();
-  res.json({ message: 'Mesa selecionada', selection: currentSelection, table });
+  res.json({ message: 'Mesa reservada e bloqueada', selection: currentSelection, table });
 });
 
 app.delete('/api/tables/select', (req, res) => {
-  if (currentSelection) history.push({ ...currentSelection, action: 'clear', clearedAt: new Date().toISOString() });
-  currentSelection = null;
+  const requested = (req.body && typeof req.body.tableId === 'number') ? req.body.tableId
+    : req.query.tableId ? Number(req.query.tableId)
+    : currentSelection?.tableId ?? null;
+  if (requested == null) return res.status(400).json({ error: 'Nenhuma mesa para liberar' });
+  const table = tables.find(t => t.id === requested);
+  if (!table) return res.status(404).json({ error: `Mesa ${requested} não encontrada` });
+  if (table.status === 'available') return res.status(409).json({ error: `Mesa ${requested} já está disponível` });
+  table.status = 'available';
+  history.push({ tableId: requested, action: 'release', releasedAt: new Date().toISOString() });
+  if (currentSelection?.tableId === requested) currentSelection = null;
   saveState();
-  res.json({ message: 'Seleção removida' });
+  res.json({ message: `Mesa ${requested} liberada`, table });
 });
 
 app.get('/api/tables/history', (req, res) => {
