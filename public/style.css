@@ -221,7 +221,17 @@ body.edit-mode #map-container .table-group.dragging use { filter: drop-shadow(0 
   max-height: 90vh; overflow-y: auto;
   border: 1px solid rgba(60,40,20,0.15);
 }
-.modal-content h2 { font-family: Georgia, serif; font-size: 22px; margin-bottom: 6px; color: var(--ink); }
+.modal-content h2 { font-family: Georgia, serif; font-size: 22px; margin-bottom: 6px; color: var(--ink); padding-right: 32px; }
+.modal-close {
+  position: absolute; top: 12px; right: 14px;
+  width: 32px !important; height: 32px;
+  background: transparent !important; color: var(--ink-soft) !important;
+  border: none !important; padding: 0 !important; margin: 0 !important;
+  font-size: 28px !important; line-height: 1; cursor: pointer;
+  border-radius: 6px;
+  display: grid; place-items: center;
+}
+.modal-close:hover { background: rgba(60,40,20,0.08) !important; color: var(--ink) !important; }
 .modal-content > .edit-field { margin-top: 14px; }
 
 .planta-source {

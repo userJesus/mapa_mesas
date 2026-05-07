@@ -167,7 +167,7 @@ async function createWithAi({ name, apiKey, photo, prompt }) {
 
 function setNrBusy(busy, msg = '') {
   $('nr-create-btn').disabled = busy;
-  $('nr-cancel-btn').disabled = busy;
+  // cancelar sempre disponível (a chamada da OpenAI já foi disparada — fechar o modal não a interrompe)
   $('nr-progress').hidden = !busy;
   if (msg) $('nr-progress-text').textContent = msg;
 }
@@ -469,6 +469,10 @@ $('new-restaurant-btn').addEventListener('click', openNewRestaurantModal);
 $('delete-restaurant-btn').addEventListener('click', deleteCurrentRestaurant);
 $('nr-create-btn').addEventListener('click', createRestaurant);
 $('nr-cancel-btn').addEventListener('click', closeNewRestaurantModal);
+$('nr-close-x').addEventListener('click', closeNewRestaurantModal);
 document.querySelector('#new-restaurant-modal .modal-backdrop').addEventListener('click', closeNewRestaurantModal);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('new-restaurant-modal').hidden) closeNewRestaurantModal();
+});
 
 init();
