@@ -135,7 +135,7 @@ function newRestaurant(id, name, plantaFile = null) {
     id, name,
     createdAt: new Date().toISOString(),
     plantaFile,
-    tables: structuredClone(DEFAULT_TABLES),
+    tables: [],
     currentSelection: null,
     history: [],
   };
