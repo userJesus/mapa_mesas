@@ -121,19 +121,26 @@ async function createWithAi({ name, apiKey, photo, prompt }) {
   let newId = null;
   let createOk = false;
   let plantaOk = false;
+  let aiError = null;
   try {
     // 1) Cria o restaurante
+    console.log('[create] POST /api/restaurants', { name });
     const r1 = await fetch(`${API}/restaurants`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     });
     const d1 = await r1.json();
-    if (!r1.ok) throw new Error(d1.error || 'Erro ao criar');
+    console.log('[create] response', r1.status, d1);
+    if (!r1.ok) throw new Error(d1.error || `Erro ao criar (HTTP ${r1.status})`);
     newId = d1.restaurant.id;
     createOk = true;
 
     // 2) Gera planta via OpenAI (pode demorar 1-2 min)
+    console.log('[create] convertendo foto para base64...', { size: photo.size, type: photo.type });
+    const imageBase64 = await fileToBase64(photo);
+    console.log('[create] base64 size:', imageBase64.length, 'chars');
+
     const startedAt = Date.now();
     const updateTimer = () => {
       const sec = Math.round((Date.now() - startedAt) / 1000);
@@ -142,7 +149,7 @@ async function createWithAi({ name, apiKey, photo, prompt }) {
     updateTimer();
     timer = setInterval(updateTimer, 1000);
 
-    const imageBase64 = await fileToBase64(photo);
+    console.log('[create] POST /planta/generate começando...');
     const r2 = await fetch(`${API}/restaurants/${newId}/planta/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -150,29 +157,40 @@ async function createWithAi({ name, apiKey, photo, prompt }) {
     });
     clearInterval(timer); timer = null;
     const d2 = await r2.json();
+    console.log('[create] /planta/generate response', r2.status, d2);
     if (!r2.ok) {
-      setStatus(`Restaurante criado, mas geração falhou: ${d2.error}`, 'error');
-    } else {
-      plantaOk = true;
-      setStatus(`Restaurante "${name}" criado com planta gerada por IA`, 'success');
+      aiError = d2.error || `OpenAI HTTP ${r2.status}`;
+      throw new Error(`Falha na geração da planta: ${aiError}`);
     }
+    plantaOk = true;
+    setStatus(`Restaurante "${name}" criado com planta gerada por IA`, 'success');
 
     // 3) Pré-carrega o novo restaurante ANTES de fechar o modal
-    if (createOk && newId) {
-      setNrBusy(true, 'Carregando dados do restaurante…');
-      activeRestaurantId = newId;
-      localStorage.setItem('activeRestaurantId', activeRestaurantId);
-      await loadRestaurantsList();
-      const sel = $('restaurant-select');
-      if (sel) sel.value = activeRestaurantId;
-      await refreshAll();
-    }
+    setNrBusy(true, 'Carregando dados do restaurante…');
+    activeRestaurantId = newId;
+    localStorage.setItem('activeRestaurantId', activeRestaurantId);
+    await loadRestaurantsList();
+    const sel = $('restaurant-select');
+    if (sel) sel.value = activeRestaurantId;
+    await refreshAll();
+
+    // Sucesso → fecha modal
+    closeNewRestaurantModal();
   } catch (e) {
-    alert(`Erro: ${e.message}`);
+    console.error('[create] erro:', e);
+    if (timer) clearInterval(timer);
+    // Se o restaurante foi criado mas a geração falhou, remove ele pra não deixar lixo
+    if (createOk && !plantaOk && newId) {
+      try {
+        await fetch(`${API}/restaurants/${newId}`, { method: 'DELETE' });
+        console.log('[create] restaurante incompleto removido:', newId);
+      } catch (delErr) { console.warn('Falha ao remover lixo:', delErr); }
+    }
+    alert(`Erro: ${e.message}\n\nO restaurante NÃO foi criado. Verifique a chave da OpenAI e tente novamente.`);
+    // Modal fica aberto para o usuário corrigir
   } finally {
     if (timer) clearInterval(timer);
     setNrBusy(false);
-    closeNewRestaurantModal();
   }
 }
 
