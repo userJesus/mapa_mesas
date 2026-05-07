@@ -367,15 +367,37 @@ app.post('/api/restaurants/:id/planta/generate', requireRestaurant, async (req, 
   if (!apiKey || typeof apiKey !== 'string') return res.status(400).json({ error: 'apiKey é obrigatória' });
   if (!imageBase64 || typeof imageBase64 !== 'string') return res.status(400).json({ error: 'imageBase64 é obrigatório' });
 
-  const defaultPrompt = `Generate a top-down architectural floor plan illustration of this restaurant.
-Show ONLY the architectural elements: walls, kitchen area with appliances (stoves, sinks, counters),
-bathrooms, entrance, varanda/outdoor decked areas, and decorative plants in pots.
-DO NOT include any tables, chairs or seating of any kind in the dining floor — leave the salão completely empty.
-DO NOT include any legend, key, sidebar, captions, labels, room names, text annotations, arrows or scale indicators.
-Output the plan only, edge-to-edge, with no surrounding panels or text.
-Use a beige/cream colored floor with subtle tile pattern, dark brown wall outlines (~6px),
-realistic illustration style similar to a professional architectural rendering.
-Aspect ratio: 1448x1086 landscape.`;
+  const defaultPrompt = `Reproduce this restaurant floor plan as a clean top-down architectural illustration.
+
+REFERENCE FIDELITY (most important):
+- Use the input image as the STRICT architectural reference.
+- Keep the EXACT same overall layout, proportions, orientation, and positions of every room
+  (kitchen, bathrooms, entrance, varandas/outdoor decks, counter/bar, storage areas, etc.).
+- Keep walls, openings and corners exactly where they appear in the input.
+- Keep decorative plants and pots in the same positions as the input.
+- If the input image contains TEXT LABELS identifying rooms (e.g. COZINHA, COCINA, KITCHEN,
+  BANHEIRO, BATHROOM, VARANDA, ENTRADA, DESPENSA, CÂMARA, BAR, CAIXA, BALCÃO, etc.):
+  use those labels to understand which area is which, and place those rooms in the SAME
+  spatial positions in the output. Respect the language of the input.
+- DO NOT invent rooms, equipment, walls, columns, doors or features that are not present
+  in the input. Do not mirror or rotate the layout.
+
+WHAT TO REMOVE FROM THE OUTPUT:
+- All tables, chairs, stools and seating of any kind. The dining floor (salão) must be
+  completely empty.
+- All text, labels, room names, legends, keys, sidebars, captions, arrows, scale bars,
+  measurements and annotations of any kind. The output image must contain ZERO text.
+
+VISUAL STYLE:
+- Top-down (bird's eye) view, edge-to-edge, no surrounding panels or borders.
+- Beige/cream colored floor with subtle tile pattern.
+- Dark brown wall outlines (~6px).
+- Kitchen with realistic appliances visible (stoves, sinks, counters), in the SAME area
+  as in the input.
+- Bathrooms with toilets/sinks visible, in the SAME area as in the input.
+- Outdoor varandas with wooden decks if present in the input.
+- Realistic illustration style, like a professional architectural rendering.
+- Aspect ratio: 1536x1024 landscape.`;
 
   try {
     const buf = Buffer.from(imageBase64, 'base64');
