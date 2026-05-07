@@ -205,6 +205,23 @@ body.edit-mode #map-container .table-group.dragging use { filter: drop-shadow(0 
 }
 .edit-field select:focus, .edit-field input:focus { outline: none; border-color: var(--gold); }
 .edit-dimensions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.label-edit-details {
+  margin-top: 12px; padding: 10px 12px; border: 1.5px solid rgba(60,40,20,0.18);
+  border-radius: 8px; background: rgba(255,255,255,0.5);
+}
+.label-edit-details summary {
+  cursor: pointer; font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1px; color: var(--ink-soft);
+  outline: none; user-select: none;
+}
+.label-edit-details[open] summary { margin-bottom: 8px; }
+.lbl-toggles { display: flex; gap: 14px; padding: 10px 0 4px; font-size: 13px; }
+.lbl-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.lbl-toggle input { accent-color: var(--gold); }
+input[type="color"] {
+  height: 36px; padding: 4px; cursor: pointer;
+}
 .btn-secondary { background: transparent !important; color: var(--wood-dark) !important; border: 1.5px solid var(--wood-dark) !important; }
 .btn-secondary:hover:not(:disabled) { background: rgba(60,40,20,0.08) !important; }
 #edit-save-btn { background: #15803d; }

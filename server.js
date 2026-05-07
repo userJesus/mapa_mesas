@@ -226,18 +226,33 @@ function background(r) {
     <text x="${CANVAS_W/2}" y="${CANVAS_H/2}" text-anchor="middle" font-family="Roboto, Arial, sans-serif" font-size="22" fill="#a0907a">Sem planta</text>`;
 }
 
+function escapeXml(s) {
+  return String(s).replace(/[<>&'"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
+}
+
 function tableSvg(t) {
   const layout = getTableLayout(t);
   if (!layout || !mesaImages[layout.img]) return '';
   const opacity = t.status === 'available' ? 1 : 0.4;
-  const labelColor = t.status === 'available' ? '#1c1917' : '#dc2626';
   const sx = t.scaleX ?? 1;
   const sy = t.scaleY ?? 1;
   const scalePart = (sx === 1 && sy === 1) ? '' : ` scale(${sx}, ${sy})`;
   const symbolId = `mesa${layout.img}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  // Configuração do rótulo (com defaults pra retrocompat)
+  const lbl = t.label || {};
+  const lblText = lbl.text ?? `Mesa ${t.id}`;
+  const lblFamily = lbl.fontFamily || 'Roboto, Arial, sans-serif';
+  const lblSize = Number.isFinite(lbl.fontSize) ? lbl.fontSize : 15;
+  const lblWeight = lbl.bold === false ? '400' : '700';
+  const lblStyle = lbl.italic ? 'italic' : 'normal';
+  const lblColor = (t.status === 'available') ? (lbl.color || '#1c1917') : '#dc2626';
+  const lblX = Number.isFinite(lbl.offsetX) ? lbl.offsetX : 0;
+  const lblY = Number.isFinite(lbl.offsetY) ? lbl.offsetY : 5;
+
   return `<g class="table-group ${t.status}" data-table-id="${t.id}" data-base-w="${layout.w}" data-base-h="${layout.h}" transform="translate(${t.x}, ${t.y})${scalePart}">
     <use href="#${symbolId}" x="${-layout.w / 2}" y="${-layout.h / 2}" width="${layout.w}" height="${layout.h}" opacity="${opacity}"/>
-    <text x="0" y="5" text-anchor="middle" font-family="Roboto, Arial, sans-serif" font-size="15" font-weight="700" fill="${labelColor}" stroke="#fdf6e3" stroke-width="3.5" paint-order="stroke" pointer-events="none">Mesa ${t.id}</text>
+    <text x="${lblX}" y="${lblY}" text-anchor="middle" font-family="${lblFamily}" font-size="${lblSize}" font-weight="${lblWeight}" font-style="${lblStyle}" fill="${lblColor}" stroke="#fdf6e3" stroke-width="3.5" paint-order="stroke" pointer-events="none">${escapeXml(lblText)}</text>
   </g>`;
 }
 
@@ -325,6 +340,7 @@ const H = {
     const positions = req.body?.positions;
     if (!Array.isArray(positions)) return res.status(400).json({ error: 'positions deve ser array' });
     const clamp = v => Math.max(0.2, Math.min(4, v));
+    const allowedFamilies = ['Roboto, Arial, sans-serif', 'Roboto', 'Arial, sans-serif'];
     const updated = [];
     for (const p of positions) {
       const t = r.tables.find(t => t.id === p.id);
@@ -334,7 +350,21 @@ const H = {
       if (Number.isFinite(p.scale) && p.scale > 0) { t.scaleX = clamp(p.scale); t.scaleY = clamp(p.scale); }
       if (Number.isFinite(p.scaleX) && p.scaleX > 0) t.scaleX = clamp(p.scaleX);
       if (Number.isFinite(p.scaleY) && p.scaleY > 0) t.scaleY = clamp(p.scaleY);
-      updated.push({ id: t.id, x: t.x, y: t.y, scaleX: t.scaleX ?? 1, scaleY: t.scaleY ?? 1 });
+
+      if (p.label && typeof p.label === 'object') {
+        const cur = t.label || {};
+        const nextLabel = { ...cur };
+        if (typeof p.label.text === 'string') nextLabel.text = p.label.text.slice(0, 80);
+        if (typeof p.label.fontFamily === 'string') nextLabel.fontFamily = p.label.fontFamily;
+        if (Number.isFinite(p.label.fontSize)) nextLabel.fontSize = Math.max(6, Math.min(64, p.label.fontSize));
+        if (typeof p.label.bold === 'boolean') nextLabel.bold = p.label.bold;
+        if (typeof p.label.italic === 'boolean') nextLabel.italic = p.label.italic;
+        if (typeof p.label.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(p.label.color)) nextLabel.color = p.label.color;
+        if (Number.isFinite(p.label.offsetX)) nextLabel.offsetX = Math.max(-300, Math.min(300, p.label.offsetX));
+        if (Number.isFinite(p.label.offsetY)) nextLabel.offsetY = Math.max(-300, Math.min(300, p.label.offsetY));
+        t.label = nextLabel;
+      }
+      updated.push({ id: t.id, x: t.x, y: t.y, scaleX: t.scaleX ?? 1, scaleY: t.scaleY ?? 1, label: t.label });
     }
     saveRestaurants();
     res.json({ message: 'Posições salvas', updated });

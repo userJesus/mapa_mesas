@@ -10,6 +10,7 @@ let mesaTypes = []; // [{id, label, w, h, builtin}]
 let editMode = false;
 let pendingPositions = {};
 let pendingScales = {};
+let pendingLabels = {};
 let originalState = {};
 let activeDrag = null;
 let editingTableId = null;
@@ -383,6 +384,67 @@ function syncDimensionInputs(id) {
   const s = getCurrentScale(id);
   $('edit-width').value = Math.round(base.w * s.x);
   $('edit-height').value = Math.round(base.h * s.y);
+  syncLabelInputs(id);
+}
+
+function getEffectiveLabel(id) {
+  const t = tables.find(t => t.id === id);
+  const p = pendingLabels[id] || {};
+  const cur = t?.label || {};
+  return {
+    text: p.text ?? cur.text ?? `Mesa ${id}`,
+    fontFamily: p.fontFamily ?? cur.fontFamily ?? 'Roboto, Arial, sans-serif',
+    fontSize: p.fontSize ?? cur.fontSize ?? 15,
+    bold: p.bold ?? cur.bold ?? true,
+    italic: p.italic ?? cur.italic ?? false,
+    color: p.color ?? cur.color ?? '#1c1917',
+    offsetX: p.offsetX ?? cur.offsetX ?? 0,
+    offsetY: p.offsetY ?? cur.offsetY ?? 5,
+  };
+}
+
+function syncLabelInputs(id) {
+  if (!id) return;
+  const lbl = getEffectiveLabel(id);
+  $('lbl-text').value = lbl.text;
+  $('lbl-family').value = lbl.fontFamily;
+  $('lbl-size').value = lbl.fontSize;
+  $('lbl-color').value = lbl.color;
+  $('lbl-bold').checked = !!lbl.bold;
+  $('lbl-italic').checked = !!lbl.italic;
+  $('lbl-offset-x').value = lbl.offsetX;
+  $('lbl-offset-y').value = lbl.offsetY;
+}
+
+function applyLabelToSvg(id) {
+  const g = document.querySelector(`#map-container .table-group[data-table-id="${id}"]`);
+  if (!g) return;
+  const text = g.querySelector('text');
+  if (!text) return;
+  const lbl = getEffectiveLabel(id);
+  text.textContent = lbl.text;
+  text.setAttribute('font-family', lbl.fontFamily);
+  text.setAttribute('font-size', String(lbl.fontSize));
+  text.setAttribute('font-weight', lbl.bold ? '700' : '400');
+  text.setAttribute('font-style', lbl.italic ? 'italic' : 'normal');
+  text.setAttribute('fill', lbl.color);
+  text.setAttribute('x', String(lbl.offsetX));
+  text.setAttribute('y', String(lbl.offsetY));
+}
+
+function onLabelInput() {
+  if (!editingTableId) return;
+  pendingLabels[editingTableId] = {
+    text: $('lbl-text').value || `Mesa ${editingTableId}`,
+    fontFamily: $('lbl-family').value,
+    fontSize: parseFloat($('lbl-size').value) || 15,
+    bold: $('lbl-bold').checked,
+    italic: $('lbl-italic').checked,
+    color: $('lbl-color').value || '#1c1917',
+    offsetX: parseFloat($('lbl-offset-x').value) || 0,
+    offsetY: parseFloat($('lbl-offset-y').value) || 5,
+  };
+  applyLabelToSvg(editingTableId);
 }
 
 function populateEditSelect() {
@@ -411,7 +473,12 @@ function enterEditMode() {
   editMode = true;
   pendingPositions = {};
   pendingScales = {};
-  originalState = Object.fromEntries(tables.map(t => [t.id, { x: t.x, y: t.y, scaleX: t.scaleX ?? 1, scaleY: t.scaleY ?? 1 }]));
+  pendingLabels = {};
+  originalState = Object.fromEntries(tables.map(t => [t.id, {
+    x: t.x, y: t.y,
+    scaleX: t.scaleX ?? 1, scaleY: t.scaleY ?? 1,
+    label: t.label ? { ...t.label } : null,
+  }]));
   document.body.classList.add('edit-mode');
   $('edit-buttons-idle').hidden = true;
   $('edit-buttons-active').hidden = false;
@@ -561,19 +628,26 @@ function exitEditMode() {
   editMode = false;
   pendingPositions = {};
   pendingScales = {};
+  pendingLabels = {};
   document.body.classList.remove('edit-mode');
   $('edit-buttons-idle').hidden = false;
   $('edit-buttons-active').hidden = true;
 }
 
 async function savePositions() {
-  const ids = new Set([...Object.keys(pendingPositions), ...Object.keys(pendingScales)]);
+  const ids = new Set([
+    ...Object.keys(pendingPositions),
+    ...Object.keys(pendingScales),
+    ...Object.keys(pendingLabels),
+  ]);
   const positions = [...ids].map(idStr => {
     const id = parseInt(idStr, 10);
     const t = tables.find(t => t.id === id);
     const p = pendingPositions[id] || { x: t.x, y: t.y };
     const s = pendingScales[id] || { x: t.scaleX ?? 1, y: t.scaleY ?? 1 };
-    return { id, x: p.x, y: p.y, scaleX: s.x, scaleY: s.y };
+    const out = { id, x: p.x, y: p.y, scaleX: s.x, scaleY: s.y };
+    if (pendingLabels[id]) out.label = pendingLabels[id];
+    return out;
   });
   if (!positions.length) { exitEditMode(); await refreshAll(); return; }
   try {
@@ -654,6 +728,8 @@ on('edit-cancel-btn', 'click', cancelEditMode);
 on('edit-table-select', 'change', onEditTableSelectChange);
 on('edit-width', 'input', onDimensionInput);
 on('edit-height', 'input', onDimensionInput);
+['lbl-text','lbl-family','lbl-size','lbl-color','lbl-bold','lbl-italic','lbl-offset-x','lbl-offset-y']
+  .forEach(id => on(id, id === 'lbl-bold' || id === 'lbl-italic' ? 'change' : 'input', onLabelInput));
 on('restaurant-select', 'change', e => changeRestaurant(e.target.value));
 on('new-restaurant-btn', 'click', openNewRestaurantModal);
 on('delete-restaurant-btn', 'click', deleteCurrentRestaurant);
