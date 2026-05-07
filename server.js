@@ -367,46 +367,59 @@ app.post('/api/restaurants/:id/planta/generate', requireRestaurant, async (req, 
   if (!apiKey || typeof apiKey !== 'string') return res.status(400).json({ error: 'apiKey é obrigatória' });
   if (!imageBase64 || typeof imageBase64 !== 'string') return res.status(400).json({ error: 'imageBase64 é obrigatório' });
 
-  const defaultPrompt = `Reproduce this restaurant floor plan as a clean top-down architectural illustration.
+  const defaultPrompt = `You are recreating a restaurant floor plan as a clean, decorated, top-down architectural illustration. The INPUT is the source of truth for the architecture; the OUTPUT must be a faithful copy of its geometry but with all tables and chairs removed.
 
-REFERENCE FIDELITY (most important):
-- Use the input image as the STRICT architectural reference.
-- Keep the EXACT same overall layout, proportions, orientation, and positions of every room
-  (kitchen, bathrooms, entrance, varandas/outdoor decks, counter/bar, storage areas, etc.).
-- Keep walls, openings and corners exactly where they appear in the input.
-- Keep decorative plants and pots in the same positions as the input.
-- If the input image contains TEXT LABELS identifying rooms (e.g. COZINHA, COCINA, KITCHEN,
-  BANHEIRO, BATHROOM, VARANDA, ENTRADA, DESPENSA, CÂMARA, BAR, CAIXA, BALCÃO, etc.):
-  use those labels to understand which area is which, and place those rooms in the SAME
-  spatial positions in the output. Respect the language of the input.
-- DO NOT invent rooms, equipment, walls, columns, doors or features that are not present
-  in the input. Do not mirror or rotate the layout.
+ARCHITECTURAL FIDELITY — copy these EXACTLY from the input, do not move, mirror, rotate or resize:
+- Outer walls: same shape, same length proportions, same corners, same wall thickness.
+- Inner walls and partitions: same positions and same lengths as in the input.
+- ALL doors and door swings (the curved arc lines that show how doors open). If the input shows a door arc somewhere, the output MUST show a door at the same position.
+- Window openings.
+- Built-in furniture: counters, bars, fixed benches/banquettes, cashier stations, reception desk, columns. Keep them in the exact position and shape shown in the input.
+- Kitchen layout: stove, sinks, counters, prep tables — same positions as in the input.
+- Bathroom fixtures: toilets, sinks, urinals — same positions as in the input.
+- Storage / câmara fria / depósito / zeladoria — same area outline as in the input.
+- Decorative plants/pots — same positions as in the input.
+- If the input has TEXT LABELS (Recepção, Cozinha, Banheiro, Depósito, Zeladoria, Câmara fria, Despensa, Caixa, Balcão, Bar, Varanda, Entrada, etc., in any language): use them to understand the rooms, and place every room in the same spatial position in the output.
 
-WHAT TO REMOVE FROM THE OUTPUT:
-- All tables, chairs, stools and seating of any kind. The dining floor (salão) must be
-  completely empty.
-- All text, labels, room names, legends, keys, sidebars, captions, arrows, scale bars,
-  measurements and annotations of any kind. The output image must contain ZERO text.
+WHAT TO REMOVE — these MUST NOT appear in the output:
+- All movable tables.
+- All chairs, stools and seating around tables (built-in benches/banquettes ARE kept).
+- All text, labels, room names, legends, keys, sidebars, captions, arrows, dimension lines, measurements (e.g. "13.78m", "4.03m"), title blocks, dates, signatures — the output must contain ZERO text.
 
-VISUAL STYLE:
-- Top-down (bird's eye) view, edge-to-edge, no surrounding panels or borders.
-- Beige/cream colored floor with subtle tile pattern.
+VISUAL STYLE OF THE OUTPUT (always — do not match the input style):
+- Top-down (bird's eye) view, edge-to-edge, no surrounding panel, no border, no margin.
+- Realistic colored illustration, NOT a black-and-white technical drawing.
+- Beige/cream floor with subtle tile pattern.
 - Dark brown wall outlines (~6px).
-- Kitchen with realistic appliances visible (stoves, sinks, counters), in the SAME area
-  as in the input.
-- Bathrooms with toilets/sinks visible, in the SAME area as in the input.
-- Outdoor varandas with wooden decks if present in the input.
-- Realistic illustration style, like a professional architectural rendering.
-- Aspect ratio: 1536x1024 landscape.`;
+- Kitchen with realistic stainless-steel appliances visible.
+- Bathrooms with toilets and sinks visible from above.
+- Outdoor decks (if present) shown as wooden plank pattern.
+- Decorative plants in pots near walls/corners (only where present in the input).
+- Look similar in style to a professional restaurant floor-plan illustration / a high-end real estate "look-and-feel" rendering.`;
 
   try {
     const buf = Buffer.from(imageBase64, 'base64');
     const blob = new Blob([buf], { type: mimeType || 'image/png' });
+
+    // Detecta aspect ratio do PNG (read width/height from the IHDR chunk, bytes 16-23 in big-endian)
+    let pickedSize = '1536x1024';
+    try {
+      if (buf[0] === 0x89 && buf[1] === 0x50) {
+        const w = buf.readUInt32BE(16);
+        const h = buf.readUInt32BE(20);
+        const ratio = w / h;
+        if (ratio > 1.2)      pickedSize = '1536x1024';   // landscape
+        else if (ratio < 0.83) pickedSize = '1024x1536'; // portrait
+        else                  pickedSize = '1024x1024';  // square-ish
+        console.log(`[ai] input ${w}x${h}, ratio ${ratio.toFixed(2)} → output ${pickedSize}`);
+      }
+    } catch (_) { /* fallback */ }
+
     const form = new FormData();
     form.append('image', blob, 'photo.png');
     form.append('model', 'gpt-image-2');
     form.append('prompt', (typeof prompt === 'string' && prompt.trim()) ? prompt : defaultPrompt);
-    form.append('size', '1536x1024');
+    form.append('size', pickedSize);
     form.append('n', '1');
 
     const r = await fetch('https://api.openai.com/v1/images/edits', {
