@@ -120,6 +120,7 @@ async function createWithAi({ name, apiKey, photo, prompt }) {
   let timer = null;
   let newId = null;
   let createOk = false;
+  let plantaOk = false;
   try {
     // 1) Cria o restaurante
     const r1 = await fetch(`${API}/restaurants`, {
@@ -152,29 +153,26 @@ async function createWithAi({ name, apiKey, photo, prompt }) {
     if (!r2.ok) {
       setStatus(`Restaurante criado, mas geração falhou: ${d2.error}`, 'error');
     } else {
+      plantaOk = true;
       setStatus(`Restaurante "${name}" criado com planta gerada por IA`, 'success');
+    }
+
+    // 3) Pré-carrega o novo restaurante ANTES de fechar o modal
+    if (createOk && newId) {
+      setNrBusy(true, 'Carregando dados do restaurante…');
+      activeRestaurantId = newId;
+      localStorage.setItem('activeRestaurantId', activeRestaurantId);
+      await loadRestaurantsList();
+      const sel = $('restaurant-select');
+      if (sel) sel.value = activeRestaurantId;
+      await refreshAll();
     }
   } catch (e) {
     alert(`Erro: ${e.message}`);
   } finally {
     if (timer) clearInterval(timer);
     setNrBusy(false);
-    // Sempre fecha o modal, independente de qualquer erro posterior
     closeNewRestaurantModal();
-  }
-
-  // Refresh fora do try/finally - se falhar, o modal já fechou
-  if (createOk && newId) {
-    activeRestaurantId = newId;
-    localStorage.setItem('activeRestaurantId', activeRestaurantId);
-    try {
-      await loadRestaurantsList();
-      const sel = $('restaurant-select');
-      if (sel) sel.value = activeRestaurantId;
-      await refreshAll();
-    } catch (e) {
-      setStatus(`Erro ao recarregar: ${e.message}`, 'error');
-    }
   }
 }
 
