@@ -91,19 +91,9 @@
       </label>
 
       <fieldset class="planta-source">
-        <legend>Planta</legend>
+        <legend>Gerar planta com IA (<code>gpt-image-2</code>)</legend>
 
-        <label class="radio-row">
-          <input type="radio" name="nr-planta" value="default" checked>
-          <span>Usar planta padrão (a do restaurante principal)</span>
-        </label>
-
-        <label class="radio-row">
-          <input type="radio" name="nr-planta" value="ai">
-          <span>Gerar via IA (OpenAI <code>gpt-image-2</code>)</span>
-        </label>
-
-        <div id="ai-fields" class="ai-fields" hidden>
+        <div id="ai-fields" class="ai-fields">
           <label class="edit-field">
             Sua chave OpenAI (não é armazenada)
             <input id="nr-api-key" type="password" placeholder="sk-...">
@@ -116,7 +106,7 @@
             Prompt extra (opcional)
             <textarea id="nr-prompt" rows="3" placeholder="Ex.: incluir varanda externa, balcão de bar à esquerda"></textarea>
           </label>
-          <p class="hint">A IA vai gerar uma vista de cima da planta, sem mesas e cadeiras.</p>
+          <p class="hint">A IA vai gerar uma vista de cima da planta, sem mesas, cadeiras ou legendas.</p>
         </div>
       </fieldset>
 

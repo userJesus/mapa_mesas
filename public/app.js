@@ -81,8 +81,6 @@ function openNewRestaurantModal() {
   $('nr-api-key').value = '';
   $('nr-photo').value = '';
   $('nr-prompt').value = '';
-  document.querySelector('input[name="nr-planta"][value="default"]').checked = true;
-  $('ai-fields').hidden = true;
   $('nr-progress').hidden = true;
   $('nr-create-btn').disabled = false;
   $('new-restaurant-modal').hidden = false;
@@ -91,11 +89,6 @@ function openNewRestaurantModal() {
 
 function closeNewRestaurantModal() {
   $('new-restaurant-modal').hidden = true;
-}
-
-function onPlantaSourceChange(e) {
-  const v = e.target.value;
-  $('ai-fields').hidden = (v !== 'ai');
 }
 
 async function fileToBase64(file) {
@@ -114,40 +107,12 @@ async function fileToBase64(file) {
 async function createRestaurant() {
   const name = $('nr-name').value.trim();
   if (!name) { alert('Informe um nome para o restaurante'); return; }
-  const source = document.querySelector('input[name="nr-planta"]:checked').value;
-
-  if (source === 'ai') {
-    const apiKey = $('nr-api-key').value.trim();
-    const photo = $('nr-photo').files[0];
-    const prompt = $('nr-prompt').value.trim();
-    if (!apiKey) { alert('Informe a chave da OpenAI'); return; }
-    if (!photo) { alert('Selecione uma foto do restaurante'); return; }
-    await createWithAi({ name, apiKey, photo, prompt });
-  } else {
-    await createSimple({ name });
-  }
-}
-
-async function createSimple({ name }) {
-  setNrBusy(true, 'Criando restaurante…');
-  try {
-    const res = await fetch(`${API}/restaurants`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Erro');
-    setStatus(`Restaurante "${name}" criado`, 'success');
-    await loadRestaurantsList();
-    activeRestaurantId = data.restaurant.id;
-    localStorage.setItem('activeRestaurantId', activeRestaurantId);
-    $('restaurant-select').value = activeRestaurantId;
-    closeNewRestaurantModal();
-    await refreshAll();
-  } catch (e) {
-    alert(`Erro: ${e.message}`);
-  } finally { setNrBusy(false); }
+  const apiKey = $('nr-api-key').value.trim();
+  const photo = $('nr-photo').files[0];
+  const prompt = $('nr-prompt').value.trim();
+  if (!apiKey) { alert('Informe a chave da OpenAI'); return; }
+  if (!photo) { alert('Selecione uma foto do restaurante'); return; }
+  await createWithAi({ name, apiKey, photo, prompt });
 }
 
 async function createWithAi({ name, apiKey, photo, prompt }) {
@@ -493,7 +458,6 @@ $('new-restaurant-btn').addEventListener('click', openNewRestaurantModal);
 $('delete-restaurant-btn').addEventListener('click', deleteCurrentRestaurant);
 $('nr-create-btn').addEventListener('click', createRestaurant);
 $('nr-cancel-btn').addEventListener('click', closeNewRestaurantModal);
-document.querySelectorAll('input[name="nr-planta"]').forEach(r => r.addEventListener('change', onPlantaSourceChange));
 document.querySelector('#new-restaurant-modal .modal-backdrop').addEventListener('click', closeNewRestaurantModal);
 
 init();
