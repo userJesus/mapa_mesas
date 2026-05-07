@@ -25,9 +25,42 @@ O servidor sobe em `http://localhost:3000` (configurável via `PORT`).
 
 Front-end: abra [http://localhost:3000](http://localhost:3000).
 
+## Multi-restaurante
+
+A partir desta versão você pode gerenciar **vários restaurantes** simultaneamente.
+Cada um tem suas próprias mesas, posições, reservas e planta.
+
+- Restaurante **default** (`id: "default"`) sempre existe e não pode ser removido.
+- Novos restaurantes podem ser criados via UI ou API.
+- A planta de fundo pode ser:
+  1. Padrão (a do default — bundled em `assets/planta.png`)
+  2. **Gerada pela OpenAI** (modelo `gpt-image-2`) a partir de uma foto + sua chave API.
+
+A geração via IA funciona assim:
+1. Usuário entra a chave da OpenAI no front (não fica armazenada)
+2. Envia uma foto do restaurante
+3. Backend chama `POST /v1/images/edits` da OpenAI com prompt pedindo planta de cima sem mesas/cadeiras
+4. Resultado vira a planta do novo restaurante, persistida em `data/plantas/<id>.png`
+
 ## Endpoints
 
 Base URL: `http://localhost:3000` (em produção, a URL pública do Railway).
+
+Existem dois conjuntos de rotas para mesas:
+- **Scoped** por restaurante: `/api/restaurants/:id/tables/...`
+- **Backward compat**: `/api/tables/...` opera no restaurante **default**.
+
+### Restaurantes (CRUD)
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET    | `/api/restaurants`                           | Lista restaurantes |
+| POST   | `/api/restaurants`                           | Cria restaurante (`{name}`) |
+| DELETE | `/api/restaurants/:id`                       | Remove (default protegido) |
+| GET    | `/api/restaurants/:id/planta`                | Imagem PNG/JPEG da planta |
+| POST   | `/api/restaurants/:id/planta/generate`       | **Gera planta via OpenAI** |
+
+### Mesas (por restaurante ou default)
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
@@ -183,6 +216,41 @@ Erros:
 - `400` — nenhum `tableId` informado e não há `currentSelection`
 - `404` — mesa não existe
 - `409` — mesa já está disponível
+
+### `POST /api/restaurants/:id/planta/generate`
+
+Gera a planta do restaurante via OpenAI `gpt-image-2`. Recebe foto +
+chave da OpenAI, retorna a URL pra imagem gerada.
+
+Body JSON:
+```json
+{
+  "apiKey": "sk-...",
+  "imageBase64": "<base64 da foto>",
+  "mimeType": "image/png",
+  "prompt": "(opcional) instruções extras"
+}
+```
+
+Resposta `200`:
+```json
+{ "message": "Planta gerada", "plantaUrl": "/api/restaurants/rest_xyz/planta" }
+```
+
+A chave **não é armazenada** no servidor — passa apenas durante a chamada
+para a OpenAI.
+
+O prompt default já instrui a IA a gerar uma vista de cima **sem mesas,
+cadeiras, legenda ou qualquer texto** — só os elementos arquitetônicos.
+
+```bash
+# arquivo da foto codificado em base64
+B64=$(base64 -w0 foto.jpg)
+
+curl -X POST URL/api/restaurants/rest_xyz/planta/generate \
+  -H "Content-Type: application/json" \
+  -d "{\"apiKey\":\"sk-...\",\"imageBase64\":\"$B64\",\"mimeType\":\"image/jpeg\"}"
+```
 
 ### `POST /api/tables/reset`
 

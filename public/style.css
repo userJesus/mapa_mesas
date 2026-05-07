@@ -26,9 +26,33 @@ header {
   padding: 18px 32px;
   border-bottom: 4px solid var(--gold);
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
 }
 
 .brand { display: flex; align-items: center; gap: 16px; }
+.header-actions { display: flex; align-items: center; gap: 10px; }
+
+.restaurant-picker {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 11px; color: #d6c5a3;
+  text-transform: uppercase; letter-spacing: 1px; font-weight: 700;
+}
+.restaurant-picker select {
+  font-family: inherit; font-size: 14px; font-weight: 500;
+  padding: 6px 10px; min-width: 200px;
+  border: 1.5px solid var(--gold); border-radius: 6px;
+  background: rgba(255,255,255,0.06); color: var(--cream);
+  text-transform: none; letter-spacing: 0;
+}
+.restaurant-picker select option { background: #2a1f15; color: var(--cream); }
+
+.btn-sm { padding: 8px 12px !important; font-size: 13px !important; width: auto !important; margin-top: 0 !important; }
+.btn-danger { background: #991b1b !important; }
+.btn-danger:hover:not(:disabled) { background: #7f1d1d !important; }
 
 .brand-mark {
   width: 44px; height: 44px;
@@ -186,3 +210,51 @@ body.edit-mode #map-container .table-group.dragging use { filter: drop-shadow(0 
 @media (max-width: 1100px) {
   main { grid-template-columns: 1fr; }
 }
+
+/* ---------- Modal: novo restaurante ---------- */
+.modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(2px); }
+.modal-content {
+  position: relative; background: var(--cream); border-radius: 14px;
+  padding: 24px 28px; box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  width: 100%; max-width: 520px;
+  max-height: 90vh; overflow-y: auto;
+  border: 1px solid rgba(60,40,20,0.15);
+}
+.modal-content h2 { font-family: Georgia, serif; font-size: 22px; margin-bottom: 6px; color: var(--ink); }
+.modal-content > .edit-field { margin-top: 14px; }
+
+.planta-source {
+  margin-top: 18px; padding: 14px; border: 1.5px solid rgba(60,40,20,0.18);
+  border-radius: 10px;
+}
+.planta-source legend { padding: 0 8px; font-size: 12px; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 1px; }
+.radio-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 14px; cursor: pointer; }
+.radio-row input { accent-color: var(--gold); }
+.radio-row code { background: rgba(60,40,20,0.08); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+
+.ai-fields {
+  margin-top: 8px; padding-top: 12px; border-top: 1px dashed rgba(60,40,20,0.15);
+}
+.ai-fields textarea {
+  font-family: inherit; font-size: 13px; padding: 8px 10px;
+  border: 1.5px solid rgba(60,40,20,0.2); border-radius: 6px;
+  background: #fff; color: var(--ink); resize: vertical;
+}
+.ai-fields .hint { font-size: 12px; color: var(--ink-soft); margin-top: 8px; line-height: 1.4; }
+
+.modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+.modal-buttons button { margin-top: 0; }
+
+.nr-progress {
+  margin-top: 16px; display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; background: rgba(201,160,107,0.15);
+  border: 1px solid var(--gold); border-radius: 8px; font-size: 13px;
+}
+.spinner {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2.5px solid rgba(60,40,20,0.2);
+  border-top-color: var(--wood-dark);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

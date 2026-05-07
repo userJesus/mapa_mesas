@@ -1,16 +1,202 @@
 const API = '/api';
 
+let restaurantsList = [];
+let activeRestaurantId = null;
 let tables = [];
 let currentSelection = null;
 
 // Estado do modo Reposicionar
 let editMode = false;
-let pendingPositions = {};      // { tableId: {x, y} }
-let pendingScales = {};         // { tableId: {x, y} }   (scaleX, scaleY)
-let originalState = {};         // backup pra cancelar
+let pendingPositions = {};
+let pendingScales = {};
+let originalState = {};
 let activeDrag = null;
-let editingTableId = null;      // mesa selecionada nos campos largura/altura
+let editingTableId = null;
 
+const $ = id => document.getElementById(id);
+const apiRoot = () => activeRestaurantId ? `${API}/restaurants/${activeRestaurantId}` : API;
+
+// ---------- Boot ----------
+async function init() {
+  await loadRestaurantsList();
+  if (!restaurantsList.length) {
+    setStatus('Nenhum restaurante encontrado', 'error');
+    return;
+  }
+  // Tenta restaurar último selecionado, senão pega o default
+  const saved = localStorage.getItem('activeRestaurantId');
+  activeRestaurantId = restaurantsList.find(r => r.id === saved)?.id || restaurantsList[0].id;
+  $('restaurant-select').value = activeRestaurantId;
+  await refreshAll();
+}
+
+async function loadRestaurantsList() {
+  try {
+    const res = await fetch(`${API}/restaurants`);
+    const data = await res.json();
+    restaurantsList = data.restaurants || [];
+    const select = $('restaurant-select');
+    select.innerHTML = restaurantsList.map(r => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
+    updateDeleteBtn();
+  } catch (e) { setStatus(`Erro ao listar restaurantes: ${e.message}`, 'error'); }
+}
+
+function updateDeleteBtn() {
+  const btn = $('delete-restaurant-btn');
+  btn.disabled = !activeRestaurantId || activeRestaurantId === 'default';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function changeRestaurant(id) {
+  activeRestaurantId = id;
+  localStorage.setItem('activeRestaurantId', id);
+  updateDeleteBtn();
+  if (editMode) cancelEditMode();
+  await refreshAll();
+}
+
+async function deleteCurrentRestaurant() {
+  if (!activeRestaurantId || activeRestaurantId === 'default') return;
+  const r = restaurantsList.find(r => r.id === activeRestaurantId);
+  if (!confirm(`Remover restaurante "${r?.name}"? Essa ação não pode ser desfeita.`)) return;
+  try {
+    const res = await fetch(`${API}/restaurants/${activeRestaurantId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro');
+    setStatus('Restaurante removido', 'success');
+    activeRestaurantId = 'default';
+    localStorage.removeItem('activeRestaurantId');
+    await loadRestaurantsList();
+    $('restaurant-select').value = activeRestaurantId;
+    await refreshAll();
+  } catch (e) { setStatus(e.message, 'error'); }
+}
+
+// ---------- Modal: novo restaurante ----------
+function openNewRestaurantModal() {
+  $('nr-name').value = '';
+  $('nr-api-key').value = '';
+  $('nr-photo').value = '';
+  $('nr-prompt').value = '';
+  document.querySelector('input[name="nr-planta"][value="default"]').checked = true;
+  $('ai-fields').hidden = true;
+  $('nr-progress').hidden = true;
+  $('nr-create-btn').disabled = false;
+  $('new-restaurant-modal').hidden = false;
+  $('nr-name').focus();
+}
+
+function closeNewRestaurantModal() {
+  $('new-restaurant-modal').hidden = true;
+}
+
+function onPlantaSourceChange(e) {
+  const v = e.target.value;
+  $('ai-fields').hidden = (v !== 'ai');
+}
+
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const result = fr.result; // "data:image/png;base64,..."
+      const b64 = String(result).split(',')[1];
+      resolve(b64);
+    };
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+
+async function createRestaurant() {
+  const name = $('nr-name').value.trim();
+  if (!name) { alert('Informe um nome para o restaurante'); return; }
+  const source = document.querySelector('input[name="nr-planta"]:checked').value;
+
+  if (source === 'ai') {
+    const apiKey = $('nr-api-key').value.trim();
+    const photo = $('nr-photo').files[0];
+    const prompt = $('nr-prompt').value.trim();
+    if (!apiKey) { alert('Informe a chave da OpenAI'); return; }
+    if (!photo) { alert('Selecione uma foto do restaurante'); return; }
+    await createWithAi({ name, apiKey, photo, prompt });
+  } else {
+    await createSimple({ name });
+  }
+}
+
+async function createSimple({ name }) {
+  setNrBusy(true, 'Criando restaurante…');
+  try {
+    const res = await fetch(`${API}/restaurants`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro');
+    setStatus(`Restaurante "${name}" criado`, 'success');
+    await loadRestaurantsList();
+    activeRestaurantId = data.restaurant.id;
+    localStorage.setItem('activeRestaurantId', activeRestaurantId);
+    $('restaurant-select').value = activeRestaurantId;
+    closeNewRestaurantModal();
+    await refreshAll();
+  } catch (e) {
+    alert(`Erro: ${e.message}`);
+  } finally { setNrBusy(false); }
+}
+
+async function createWithAi({ name, apiKey, photo, prompt }) {
+  setNrBusy(true, 'Criando restaurante…');
+  try {
+    // 1) Cria o restaurante
+    const r1 = await fetch(`${API}/restaurants`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const d1 = await r1.json();
+    if (!r1.ok) throw new Error(d1.error || 'Erro ao criar');
+    const newId = d1.restaurant.id;
+
+    // 2) Gera planta via OpenAI
+    setNrBusy(true, 'Gerando planta com OpenAI (pode levar 1–2 min)…');
+    const imageBase64 = await fileToBase64(photo);
+    const r2 = await fetch(`${API}/restaurants/${newId}/planta/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey, imageBase64, mimeType: photo.type, prompt }),
+    });
+    const d2 = await r2.json();
+    if (!r2.ok) {
+      // Restaurante já criado mas geração falhou — mantém o restaurante com planta default
+      setStatus(`Restaurante criado, mas geração falhou: ${d2.error}`, 'error');
+    } else {
+      setStatus(`Restaurante "${name}" criado com planta gerada por IA`, 'success');
+    }
+    await loadRestaurantsList();
+    activeRestaurantId = newId;
+    localStorage.setItem('activeRestaurantId', activeRestaurantId);
+    $('restaurant-select').value = activeRestaurantId;
+    closeNewRestaurantModal();
+    await refreshAll();
+  } catch (e) {
+    alert(`Erro: ${e.message}`);
+  } finally { setNrBusy(false); }
+}
+
+function setNrBusy(busy, msg = '') {
+  $('nr-create-btn').disabled = busy;
+  $('nr-cancel-btn').disabled = busy;
+  $('nr-progress').hidden = !busy;
+  if (msg) $('nr-progress-text').textContent = msg;
+}
+
+// ---------- Carregar planta + dados ----------
 async function refreshAll() {
   await Promise.all([loadFloorplan(), loadData()]);
   renderSelection();
@@ -20,39 +206,35 @@ async function refreshAll() {
 
 async function loadFloorplan() {
   try {
-    const res = await fetch(`${API}/tables/image`);
+    const res = await fetch(`${apiRoot()}/tables/image`);
     const text = await res.text();
     const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
     const svg = doc.documentElement;
-    const container = document.getElementById('map-container');
+    const container = $('map-container');
     container.innerHTML = '';
     container.appendChild(svg);
     setStatus('Planta carregada', 'success');
-  } catch (e) {
-    setStatus(`Erro ao carregar planta: ${e.message}`, 'error');
-  }
+  } catch (e) { setStatus(`Erro ao carregar planta: ${e.message}`, 'error'); }
 }
 
 async function loadData() {
-  const res = await fetch(`${API}/tables`);
+  const res = await fetch(`${apiRoot()}/tables`);
   const data = await res.json();
   tables = data.tables;
   currentSelection = data.currentSelection;
 }
 
-// ---------- Modo seleção (clique pra reservar) ----------
+// ---------- Modo seleção ----------
 function attachClickHandlers() {
   document.querySelectorAll('#map-container .table-group').forEach(g => {
     const id = parseInt(g.dataset.tableId, 10);
-    if (g.classList.contains('available')) {
-      g.addEventListener('click', () => selectTable(id));
-    }
+    if (g.classList.contains('available')) g.addEventListener('click', () => selectTable(id));
   });
 }
 
 async function selectTable(tableId) {
   try {
-    const res = await fetch(`${API}/tables/select`, {
+    const res = await fetch(`${apiRoot()}/tables/select`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tableId }),
@@ -68,7 +250,7 @@ async function releaseTable() {
   if (!currentSelection) return;
   const tableId = currentSelection.tableId;
   try {
-    const res = await fetch(`${API}/tables/select`, {
+    const res = await fetch(`${apiRoot()}/tables/select`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tableId }),
@@ -80,7 +262,7 @@ async function releaseTable() {
   } catch (e) { setStatus(e.message, 'error'); }
 }
 
-// ---------- Modo reposicionar (drag-and-drop) ----------
+// ---------- Modo reposicionar ----------
 function svgPoint(svg, clientX, clientY) {
   const ctm = svg.getScreenCTM();
   if (!ctm) return { x: clientX, y: clientY };
@@ -99,19 +281,13 @@ function attachDragHandlers() {
 function getCurrentScale(id) {
   const t = tables.find(t => t.id === id);
   const pend = pendingScales[id];
-  return {
-    x: pend?.x ?? t.scaleX ?? 1,
-    y: pend?.y ?? t.scaleY ?? 1,
-  };
+  return { x: pend?.x ?? t.scaleX ?? 1, y: pend?.y ?? t.scaleY ?? 1 };
 }
 
 function getBaseDims(id) {
   const g = document.querySelector(`#map-container .table-group[data-table-id="${id}"]`);
   if (!g) return { w: 100, h: 100 };
-  return {
-    w: parseFloat(g.dataset.baseW) || 100,
-    h: parseFloat(g.dataset.baseH) || 100,
-  };
+  return { w: parseFloat(g.dataset.baseW) || 100, h: parseFloat(g.dataset.baseH) || 100 };
 }
 
 function applyTransform(g, id) {
@@ -121,6 +297,40 @@ function applyTransform(g, id) {
   const s = getCurrentScale(id);
   const scalePart = (s.x === 1 && s.y === 1) ? '' : ` scale(${s.x}, ${s.y})`;
   g.setAttribute('transform', `translate(${x}, ${y})${scalePart}`);
+}
+
+function onDragStart(e) {
+  if (!editMode) return;
+  e.preventDefault();
+  const g = e.currentTarget;
+  const id = parseInt(g.dataset.tableId, 10);
+  const svg = document.querySelector('#map-container svg');
+  const t = tables.find(t => t.id === id);
+  const cur = pendingPositions[id] || { x: t.x, y: t.y };
+  const pt = svgPoint(svg, e.clientX, e.clientY);
+  activeDrag = { id, group: g, svg, offset: { x: pt.x - cur.x, y: pt.y - cur.y } };
+  g.classList.add('dragging');
+  g.setPointerCapture?.(e.pointerId);
+  g.addEventListener('pointermove', onDragMove);
+  g.addEventListener('pointerup', onDragEnd);
+  g.addEventListener('pointercancel', onDragEnd);
+  selectTableForEdit(id);
+}
+
+function onDragMove(e) {
+  if (!activeDrag) return;
+  const pt = svgPoint(activeDrag.svg, e.clientX, e.clientY);
+  pendingPositions[activeDrag.id] = { x: pt.x - activeDrag.offset.x, y: pt.y - activeDrag.offset.y };
+  applyTransform(activeDrag.group, activeDrag.id);
+}
+
+function onDragEnd() {
+  if (!activeDrag) return;
+  activeDrag.group.classList.remove('dragging');
+  activeDrag.group.removeEventListener('pointermove', onDragMove);
+  activeDrag.group.removeEventListener('pointerup', onDragEnd);
+  activeDrag.group.removeEventListener('pointercancel', onDragEnd);
+  activeDrag = null;
 }
 
 function onTableWheel(e) {
@@ -136,12 +346,11 @@ function onTableWheel(e) {
   applyTransform(g, id);
   selectTableForEdit(id);
   syncDimensionInputs(id);
-  setStatus(`Mesa ${id} → ${pendingScales[id].x.toFixed(2)}× / ${pendingScales[id].y.toFixed(2)}×`, '');
 }
 
 function selectTableForEdit(id) {
   editingTableId = id;
-  const select = document.getElementById('edit-table-select');
+  const select = $('edit-table-select');
   if (select) select.value = String(id);
 }
 
@@ -149,25 +358,19 @@ function syncDimensionInputs(id) {
   if (!id) return;
   const base = getBaseDims(id);
   const s = getCurrentScale(id);
-  const wInput = document.getElementById('edit-width');
-  const hInput = document.getElementById('edit-height');
-  if (wInput) wInput.value = Math.round(base.w * s.x);
-  if (hInput) hInput.value = Math.round(base.h * s.y);
+  $('edit-width').value = Math.round(base.w * s.x);
+  $('edit-height').value = Math.round(base.h * s.y);
 }
 
 function populateEditSelect() {
-  const select = document.getElementById('edit-table-select');
-  if (!select) return;
-  select.innerHTML = tables.map(t => `<option value="${t.id}">Mesa ${t.id}</option>`).join('');
+  $('edit-table-select').innerHTML = tables.map(t => `<option value="${t.id}">Mesa ${t.id}</option>`).join('');
 }
 
 function onDimensionInput() {
   if (!editingTableId) return;
   const base = getBaseDims(editingTableId);
-  const wInput = document.getElementById('edit-width');
-  const hInput = document.getElementById('edit-height');
-  const w = parseFloat(wInput.value);
-  const h = parseFloat(hInput.value);
+  const w = parseFloat($('edit-width').value);
+  const h = parseFloat($('edit-height').value);
   if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
   const sx = Math.max(0.2, Math.min(4, w / base.w));
   const sy = Math.max(0.2, Math.min(4, h / base.h));
@@ -177,50 +380,8 @@ function onDimensionInput() {
 }
 
 function onEditTableSelectChange() {
-  const select = document.getElementById('edit-table-select');
-  editingTableId = parseInt(select.value, 10);
+  editingTableId = parseInt($('edit-table-select').value, 10);
   syncDimensionInputs(editingTableId);
-}
-
-function onDragStart(e) {
-  if (!editMode) return;
-  e.preventDefault();
-  const g = e.currentTarget;
-  const id = parseInt(g.dataset.tableId, 10);
-  const svg = document.querySelector('#map-container svg');
-  const t = tables.find(t => t.id === id);
-  const cur = pendingPositions[id] || { x: t.x, y: t.y };
-  const pt = svgPoint(svg, e.clientX, e.clientY);
-  activeDrag = {
-    id,
-    group: g,
-    svg,
-    offset: { x: pt.x - cur.x, y: pt.y - cur.y },
-  };
-  g.classList.add('dragging');
-  g.setPointerCapture?.(e.pointerId);
-  g.addEventListener('pointermove', onDragMove);
-  g.addEventListener('pointerup', onDragEnd);
-  g.addEventListener('pointercancel', onDragEnd);
-}
-
-function onDragMove(e) {
-  if (!activeDrag) return;
-  const pt = svgPoint(activeDrag.svg, e.clientX, e.clientY);
-  const newX = pt.x - activeDrag.offset.x;
-  const newY = pt.y - activeDrag.offset.y;
-  pendingPositions[activeDrag.id] = { x: newX, y: newY };
-  applyTransform(activeDrag.group, activeDrag.id);
-}
-
-function onDragEnd(e) {
-  if (!activeDrag) return;
-  activeDrag.group.classList.remove('dragging');
-  activeDrag.group.removeEventListener('pointermove', onDragMove);
-  activeDrag.group.removeEventListener('pointerup', onDragEnd);
-  activeDrag.group.removeEventListener('pointercancel', onDragEnd);
-  activeDrag = null;
-  setStatus(`${Object.keys(pendingPositions).length} mesa(s) movida(s) — não esqueça de salvar`, '');
 }
 
 function enterEditMode() {
@@ -229,16 +390,16 @@ function enterEditMode() {
   pendingScales = {};
   originalState = Object.fromEntries(tables.map(t => [t.id, { x: t.x, y: t.y, scaleX: t.scaleX ?? 1, scaleY: t.scaleY ?? 1 }]));
   document.body.classList.add('edit-mode');
-  document.getElementById('edit-buttons-idle').hidden = true;
-  document.getElementById('edit-buttons-active').hidden = false;
+  $('edit-buttons-idle').hidden = true;
+  $('edit-buttons-active').hidden = false;
   populateEditSelect();
   editingTableId = tables[0]?.id ?? null;
   if (editingTableId) {
-    document.getElementById('edit-table-select').value = String(editingTableId);
+    $('edit-table-select').value = String(editingTableId);
     syncDimensionInputs(editingTableId);
   }
   attachDragHandlers();
-  setStatus('Modo Reposicionar — arraste para mover, edite largura/altura abaixo', '');
+  setStatus('Modo Reposicionar — arraste, scroll ou edite largura/altura', '');
 }
 
 function exitEditMode() {
@@ -246,8 +407,8 @@ function exitEditMode() {
   pendingPositions = {};
   pendingScales = {};
   document.body.classList.remove('edit-mode');
-  document.getElementById('edit-buttons-idle').hidden = false;
-  document.getElementById('edit-buttons-active').hidden = true;
+  $('edit-buttons-idle').hidden = false;
+  $('edit-buttons-active').hidden = true;
 }
 
 async function savePositions() {
@@ -259,14 +420,9 @@ async function savePositions() {
     const s = pendingScales[id] || { x: t.scaleX ?? 1, y: t.scaleY ?? 1 };
     return { id, x: p.x, y: p.y, scaleX: s.x, scaleY: s.y };
   });
-  if (!positions.length) {
-    setStatus('Nenhuma alteração para salvar', '');
-    exitEditMode();
-    await refreshAll();
-    return;
-  }
+  if (!positions.length) { exitEditMode(); await refreshAll(); return; }
   try {
-    const res = await fetch(`${API}/tables/positions`, {
+    const res = await fetch(`${apiRoot()}/tables/positions`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ positions }),
@@ -293,13 +449,12 @@ function cancelEditMode() {
   }
   setStatus('Mudanças descartadas', '');
   exitEditMode();
-  refreshAll();
 }
 
 // ---------- Sidebar ----------
 function renderSelection() {
-  const info = document.getElementById('selection-info');
-  const btn = document.getElementById('clear-btn');
+  const info = $('selection-info');
+  const btn = $('clear-btn');
   if (currentSelection) {
     const t = tables.find(x => x.id === currentSelection.tableId);
     const shapeLabel = {
@@ -310,10 +465,7 @@ function renderSelection() {
       rect_8: 'Retangular 8 lug.',
     }[`${t.shape}_${t.seats}`] || `${t.seats} lugares`;
     info.className = 'selection-filled';
-    info.innerHTML = `<strong>Mesa ${t.id}</strong><br>
-      <span>Tipo: ${shapeLabel}</span><br>
-      <span>Área: ${t.area}</span><br>
-      <small style="color:#6b5a45">${new Date(currentSelection.selectedAt).toLocaleString('pt-BR')}</small>`;
+    info.innerHTML = `<strong>Mesa ${t.id}</strong><br><span>Tipo: ${shapeLabel}</span><br><span>Área: ${t.area}</span><br><small style="color:#6b5a45">${new Date(currentSelection.selectedAt).toLocaleString('pt-BR')}</small>`;
     btn.disabled = false;
   } else {
     info.className = 'selection-empty';
@@ -323,16 +475,25 @@ function renderSelection() {
 }
 
 function setStatus(msg, type = '') {
-  const el = document.getElementById('status-msg');
+  const el = $('status-msg');
   el.textContent = msg;
   el.className = type;
 }
 
-document.getElementById('clear-btn').addEventListener('click', releaseTable);
-document.getElementById('edit-toggle-btn').addEventListener('click', enterEditMode);
-document.getElementById('edit-save-btn').addEventListener('click', savePositions);
-document.getElementById('edit-cancel-btn').addEventListener('click', cancelEditMode);
-document.getElementById('edit-table-select').addEventListener('change', onEditTableSelectChange);
-document.getElementById('edit-width').addEventListener('input', onDimensionInput);
-document.getElementById('edit-height').addEventListener('input', onDimensionInput);
-refreshAll();
+// ---------- Eventos ----------
+$('clear-btn').addEventListener('click', releaseTable);
+$('edit-toggle-btn').addEventListener('click', enterEditMode);
+$('edit-save-btn').addEventListener('click', savePositions);
+$('edit-cancel-btn').addEventListener('click', cancelEditMode);
+$('edit-table-select').addEventListener('change', onEditTableSelectChange);
+$('edit-width').addEventListener('input', onDimensionInput);
+$('edit-height').addEventListener('input', onDimensionInput);
+$('restaurant-select').addEventListener('change', e => changeRestaurant(e.target.value));
+$('new-restaurant-btn').addEventListener('click', openNewRestaurantModal);
+$('delete-restaurant-btn').addEventListener('click', deleteCurrentRestaurant);
+$('nr-create-btn').addEventListener('click', createRestaurant);
+$('nr-cancel-btn').addEventListener('click', closeNewRestaurantModal);
+document.querySelectorAll('input[name="nr-planta"]').forEach(r => r.addEventListener('change', onPlantaSourceChange));
+document.querySelector('#new-restaurant-modal .modal-backdrop').addEventListener('click', closeNewRestaurantModal);
+
+init();

@@ -15,6 +15,14 @@
         <p>Selecione uma mesa disponível para reservar</p>
       </div>
     </div>
+    <div class="header-actions">
+      <label class="restaurant-picker">
+        Restaurante
+        <select id="restaurant-select"></select>
+      </label>
+      <button id="new-restaurant-btn" class="btn-secondary btn-sm">+ Novo</button>
+      <button id="delete-restaurant-btn" class="btn-danger btn-sm">Remover</button>
+    </div>
   </header>
 
   <main>
@@ -61,18 +69,6 @@
           <li><span class="dot dot-available"></span> Disponível</li>
           <li><span class="dot dot-occupied"></span> Ocupada</li>
           <li><span class="dot dot-reserved"></span> Reservada</li>
-          <li><span class="dot dot-selected"></span> Selecionada</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <h2>Tipos de mesa</h2>
-        <ul class="types">
-          <li><span class="type-icon round-2"></span> Redonda · 2 lugares</li>
-          <li><span class="type-icon round-4"></span> Redonda · 4 lugares</li>
-          <li><span class="type-icon square-4"></span> Quadrada · 4 lugares</li>
-          <li><span class="type-icon rect-6"></span> Retangular · 6 lugares</li>
-          <li><span class="type-icon rect-8"></span> Retangular · 8 lugares</li>
         </ul>
       </div>
 
@@ -82,6 +78,59 @@
       </div>
     </aside>
   </main>
+
+  <!-- Modal: novo restaurante -->
+  <div id="new-restaurant-modal" class="modal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <h2>Novo restaurante</h2>
+
+      <label class="edit-field">
+        Nome do restaurante
+        <input id="nr-name" type="text" placeholder="Ex.: Filial Centro" maxlength="100">
+      </label>
+
+      <fieldset class="planta-source">
+        <legend>Planta</legend>
+
+        <label class="radio-row">
+          <input type="radio" name="nr-planta" value="default" checked>
+          <span>Usar planta padrão (a do restaurante principal)</span>
+        </label>
+
+        <label class="radio-row">
+          <input type="radio" name="nr-planta" value="ai">
+          <span>Gerar via IA (OpenAI <code>gpt-image-2</code>)</span>
+        </label>
+
+        <div id="ai-fields" class="ai-fields" hidden>
+          <label class="edit-field">
+            Sua chave OpenAI (não é armazenada)
+            <input id="nr-api-key" type="password" placeholder="sk-...">
+          </label>
+          <label class="edit-field">
+            Foto do restaurante (será enviada para a OpenAI)
+            <input id="nr-photo" type="file" accept="image/*">
+          </label>
+          <label class="edit-field">
+            Prompt extra (opcional)
+            <textarea id="nr-prompt" rows="3" placeholder="Ex.: incluir varanda externa, balcão de bar à esquerda"></textarea>
+          </label>
+          <p class="hint">A IA vai gerar uma vista de cima da planta, sem mesas e cadeiras.</p>
+        </div>
+      </fieldset>
+
+      <div id="nr-progress" class="nr-progress" hidden>
+        <div class="spinner"></div>
+        <span id="nr-progress-text">Gerando planta…</span>
+      </div>
+
+      <div class="modal-buttons">
+        <button id="nr-create-btn">Criar</button>
+        <button id="nr-cancel-btn" class="btn-secondary">Cancelar</button>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
