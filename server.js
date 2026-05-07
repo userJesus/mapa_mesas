@@ -535,9 +535,11 @@ app.delete('/api/mesas/:id', (req, res) => {
 //  - shape: 'round' | 'square' | 'rect'
 //  - seats: número de cadeiras (1..20)
 //  - style: estilo descrito pelo usuário (opcional)
-//  - restaurantId: pra usar a planta como referência quando style está vazio (opcional)
+//  - reference: 'auto' | 'planta' | 'mesa' | 'none'   (default: 'auto')
+//  - referenceMesaId: id da mesa custom quando reference='mesa'
+//  - restaurantId: id do restaurante (pra pegar a planta quando reference='planta'/'auto')
 app.post('/api/mesas/generate', async (req, res) => {
-  const { apiKey, shape, seats, style, restaurantId, width, height } = req.body || {};
+  const { apiKey, shape, seats, style, reference, referenceMesaId, restaurantId } = req.body || {};
   if (!apiKey) return res.status(400).json({ error: 'apiKey é obrigatória' });
   if (!['round', 'square', 'rect'].includes(shape)) return res.status(400).json({ error: 'shape deve ser round, square ou rect' });
   const seatsNum = parseInt(seats, 10);
@@ -548,28 +550,44 @@ app.post('/api/mesas/generate', async (req, res) => {
   const label = `${shapeLabelPt} · ${seatsNum} lugar${seatsNum > 1 ? 'es' : ''}`;
 
   const userStyle = (style || '').trim();
+  const refMode = reference || 'auto';
 
-  // Decide se usa a planta como referência (apenas se sem estilo descrito)
-  let plantaRefBuf = null;
-  let plantaRefMime = null;
-  if (!userStyle && restaurantId) {
-    const r = restaurants[restaurantId];
-    if (r) {
-      const planta = getPlantaForRestaurant(r);
+  // Resolve qual imagem usar como referência (se houver)
+  let refBuf = null, refMime = null, refKind = null;
+  if (refMode === 'mesa' && referenceMesaId && mesasCustom[referenceMesaId]) {
+    const f = path.join(MESAS_CUSTOM_DIR, mesasCustom[referenceMesaId].file);
+    if (fs.existsSync(f)) {
+      refBuf = fs.readFileSync(f);
+      refMime = 'image/png';
+      refKind = 'mesa';
+    }
+  } else if (refMode === 'planta' || refMode === 'auto') {
+    if (restaurantId && restaurants[restaurantId]) {
+      const planta = getPlantaForRestaurant(restaurants[restaurantId]);
       if (planta) {
-        plantaRefBuf = Buffer.from(planta.b64, 'base64');
-        plantaRefMime = planta.mime;
+        refBuf = Buffer.from(planta.b64, 'base64');
+        refMime = planta.mime;
+        refKind = 'planta';
       }
     }
   }
+  // refMode === 'none' → não usa referência
 
   // Monta o prompt
   const composition = shape === 'rect' ? 'rectangular 3:2' : 'square 1:1';
-  const stylePart = userStyle
-    ? `STYLE: ${userStyle}.`
-    : (plantaRefBuf
-      ? `STYLE: match the wood tone, color palette and overall aesthetic of the reference restaurant interior image. Use the same furniture style.`
-      : `STYLE: realistic illustration of warm wooden restaurant furniture, similar to a high-end real estate rendering.`);
+
+  let stylePart;
+  if (userStyle && refKind) {
+    stylePart = `STYLE: ${userStyle}. Use the input ${refKind === 'planta' ? 'restaurant interior' : 'reference table'} image only as a visual aesthetic guide (color palette, wood tone, texture); the user's style description above takes priority.`;
+  } else if (userStyle) {
+    stylePart = `STYLE: ${userStyle}.`;
+  } else if (refKind === 'planta') {
+    stylePart = `STYLE: match the wood tone, color palette and overall aesthetic of the reference restaurant interior image. Use the same furniture style as the planta.`;
+  } else if (refKind === 'mesa') {
+    stylePart = `STYLE: keep the wood tone, color palette and overall aesthetic identical to the reference table image. Just adapt the shape and number of chairs as specified above; everything else should look the same.`;
+  } else {
+    stylePart = `STYLE: realistic illustration of warm wooden restaurant furniture, similar to a high-end real estate rendering.`;
+  }
 
   const fullPrompt = `Generate a single restaurant ${shapeLabelEn} table with EXACTLY ${seatsNum} chairs around it.
 
@@ -578,12 +596,16 @@ VIEW & COMPOSITION:
 - Centered composition, ${composition} layout.
 - The table fills most of the central area; chairs are around the perimeter.
 
-CHAIRS — must be exactly ${seatsNum}:
+CHAIRS — there must be EXACTLY ${seatsNum} chairs, no more no fewer:
 ${shape === 'round' ? `- Around a round table, distribute the ${seatsNum} chairs evenly along the circumference.`
 : shape === 'square' ? `- Around a square table, distribute the ${seatsNum} chairs symmetrically (typically 1 per side or 2 per side).`
 : `- Around a rectangular table, place most chairs along the long sides, plus one chair at each short end if seats > 4.`}
-- All chairs identical, with backrests pointing OUTWARD (away from the table).
-- Render the chairs realistically (seat + backrest visible from above).
+- Each chair MUST be drawn COMPLETELY, with:
+  * a clearly visible solid SEAT (the cushion / surface where a person sits, square or rounded, with a defined fill color),
+  * a clearly visible BACKREST (the vertical curved or flat panel behind the seat).
+- Backrests point OUTWARD, away from the table.
+- DO NOT draw skeletal/empty/incomplete chairs. DO NOT draw chairs as just outlines without filled seats. DO NOT draw chairs with transparent or missing seats.
+- All ${seatsNum} chairs must be identical, fully filled and clearly recognizable as chairs from above.
 
 BACKGROUND:
 - Solid pure white background (#FFFFFF) outside the furniture.
@@ -592,16 +614,15 @@ BACKGROUND:
 
 ${stylePart}
 
-The output must be ONE single piece of furniture (the table with its chairs) on a clean white background.`;
+The output must be ONE single piece of furniture (the table with its complete chairs) on a clean white background.`;
 
   try {
-    console.log(`[mesa-gen] ${label} | style="${userStyle || '(planta-ref)'}" | usando ${plantaRefBuf ? '/edits com planta' : '/generations'}`);
+    console.log(`[mesa-gen] ${label} | style="${userStyle || '(default)'}" | ref=${refKind || 'none'} | endpoint=${refBuf ? '/edits' : '/generations'}`);
     let r, data;
-    if (plantaRefBuf) {
-      // /v1/images/edits com a planta como referência
-      const blob = new Blob([plantaRefBuf], { type: plantaRefMime || 'image/png' });
+    if (refBuf) {
+      const blob = new Blob([refBuf], { type: refMime || 'image/png' });
       const form = new FormData();
-      form.append('image', blob, 'planta.png');
+      form.append('image', blob, refKind === 'planta' ? 'planta.png' : 'mesa-ref.png');
       form.append('model', 'gpt-image-2');
       form.append('prompt', fullPrompt);
       form.append('size', '1024x1024');

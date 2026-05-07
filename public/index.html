@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mapa de Mesas — Restaurante</title>
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
   <header>
@@ -169,7 +169,23 @@
         Estilo (opcional)
         <input id="gm-style" type="text" placeholder="Ex.: madeira escura rústica, metal industrial, mármore branco, palhinha...">
       </label>
-      <p class="hint" style="margin-top:-4px">Se vazio, a IA usará a planta atual como referência de estilo.</p>
+
+      <label class="edit-field">
+        Usar como referência de estilo
+        <select id="gm-reference">
+          <option value="auto">Automático — planta atual se houver</option>
+          <option value="planta">Planta do restaurante atual</option>
+          <option value="mesa">Mesa já gerada…</option>
+          <option value="none">Sem referência (apenas o estilo descrito)</option>
+        </select>
+      </label>
+
+      <label class="edit-field" id="gm-mesa-ref-row" hidden>
+        Qual mesa usar como referência
+        <select id="gm-reference-mesa"></select>
+      </label>
+
+      <p class="hint" style="margin-top:-4px">A referência ajuda a manter a paleta e o estilo coerentes — peça pequenas mudanças no estilo e a mesa nova vai sair muito parecida com a referência.</p>
 
       <label class="edit-field">
         Sua chave OpenAI (não é armazenada)
@@ -187,6 +203,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

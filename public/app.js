@@ -483,6 +483,9 @@ function openGenMesaModal() {
   $('gm-seats').value = '4';
   $('gm-style').value = '';
   $('gm-api-key').value = '';
+  $('gm-reference').value = 'auto';
+  $('gm-mesa-ref-row').hidden = true;
+  populateReferenceMesaSelect();
   $('gm-progress').hidden = true;
   $('gm-create-btn').disabled = false;
   $('gen-mesa-modal').hidden = false;
@@ -490,13 +493,33 @@ function openGenMesaModal() {
 }
 function closeGenMesaModal() { $('gen-mesa-modal').hidden = true; }
 
+function populateReferenceMesaSelect() {
+  const sel = $('gm-reference-mesa');
+  if (!sel) return;
+  const customs = mesaTypes.filter(m => !m.builtin);
+  if (!customs.length) {
+    sel.innerHTML = '<option value="">(nenhuma mesa custom gerada ainda)</option>';
+  } else {
+    sel.innerHTML = customs.map(m => `<option value="${m.id}">${m.label}</option>`).join('');
+  }
+}
+
+function onReferenceChange() {
+  const mode = $('gm-reference').value;
+  $('gm-mesa-ref-row').hidden = (mode !== 'mesa');
+  if (mode === 'mesa') populateReferenceMesaSelect();
+}
+
 async function generateMesa() {
   const shape = $('gm-shape').value;
   const seats = parseInt($('gm-seats').value, 10);
   const style = $('gm-style').value.trim();
   const apiKey = $('gm-api-key').value.trim();
+  const reference = $('gm-reference').value;
+  const referenceMesaId = (reference === 'mesa') ? $('gm-reference-mesa').value : null;
   if (!apiKey) { alert('Informe a chave OpenAI'); return; }
   if (!Number.isFinite(seats)) { alert('Selecione o número de lugares'); return; }
+  if (reference === 'mesa' && !referenceMesaId) { alert('Selecione qual mesa custom usar como referência ou troque pra outra opção'); return; }
 
   setGmBusy(true, 'Gerando imagem com OpenAI…');
   let timer = null;
@@ -508,7 +531,7 @@ async function generateMesa() {
     const res = await fetch(`${API}/mesas/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey, shape, seats, style, restaurantId: activeRestaurantId }),
+      body: JSON.stringify({ apiKey, shape, seats, style, reference, referenceMesaId, restaurantId: activeRestaurantId }),
     });
     clearInterval(timer); timer = null;
     const data = await res.json();
@@ -644,6 +667,7 @@ on('open-gen-mesa-btn', 'click', openGenMesaModal);
 on('gm-create-btn', 'click', generateMesa);
 on('gm-cancel-btn', 'click', closeGenMesaModal);
 on('gm-close-x', 'click', closeGenMesaModal);
+on('gm-reference', 'change', onReferenceChange);
 onSel('#gen-mesa-modal .modal-backdrop', 'click', closeGenMesaModal);
 document.addEventListener('keydown', e => {
   const modal = $('new-restaurant-modal');
