@@ -486,7 +486,7 @@ VISUAL STYLE OF THE OUTPUT (always — do not match the input style):
     const buf = Buffer.from(imageBase64, 'base64');
     const blob = new Blob([buf], { type: mimeType || 'image/png' });
 
-    // Detecta aspect ratio do PNG (read width/height from the IHDR chunk, bytes 16-23 in big-endian)
+    // Detecta aspect ratio do PNG (header IHDR, bytes 16-23 big-endian)
     let pickedSize = '1536x1024';
     try {
       if (buf[0] === 0x89 && buf[1] === 0x50) {
@@ -496,7 +496,9 @@ VISUAL STYLE OF THE OUTPUT (always — do not match the input style):
         if (ratio > 1.2)      pickedSize = '1536x1024';   // landscape
         else if (ratio < 0.83) pickedSize = '1024x1536'; // portrait
         else                  pickedSize = '1024x1024';  // square-ish
-        console.log(`[ai] input ${w}x${h}, ratio ${ratio.toFixed(2)} → output ${pickedSize}`);
+        console.log(`[ai] input ${w}x${h} (${(buf.length/1024).toFixed(0)}KB), ratio ${ratio.toFixed(2)} → output ${pickedSize}`);
+      } else {
+        console.log(`[ai] input ${(buf.length/1024).toFixed(0)}KB`);
       }
     } catch (_) { /* fallback */ }
 
@@ -507,11 +509,29 @@ VISUAL STYLE OF THE OUTPUT (always — do not match the input style):
     form.append('size', pickedSize);
     form.append('n', '1');
 
-    const r = await fetch('https://api.openai.com/v1/images/edits', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-      body: form,
-    });
+    // Timeout de 4 minutos — gpt-image-2 com input grande pode demorar
+    const ac = new AbortController();
+    const TIMEOUT_MS = 240000;
+    const timeoutId = setTimeout(() => ac.abort(), TIMEOUT_MS);
+    const startedAt = Date.now();
+    console.log(`[ai] enviando para OpenAI…`);
+    let r;
+    try {
+      r = await fetch('https://api.openai.com/v1/images/edits', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+        body: form,
+        signal: ac.signal,
+      });
+    } catch (e) {
+      clearTimeout(timeoutId);
+      if (e.name === 'AbortError') {
+        return res.status(504).json({ error: `Timeout: OpenAI não respondeu em ${TIMEOUT_MS/1000}s. Tente uma imagem menor (< 1MB) ou tente novamente em alguns minutos.` });
+      }
+      throw e;
+    }
+    clearTimeout(timeoutId);
+    console.log(`[ai] resposta da OpenAI em ${Math.round((Date.now()-startedAt)/1000)}s, status ${r.status}`);
     const data = await r.json();
     if (!r.ok) return res.status(r.status).json({ error: data.error?.message || `OpenAI HTTP ${r.status}` });
     const generatedB64 = data.data?.[0]?.b64_json;

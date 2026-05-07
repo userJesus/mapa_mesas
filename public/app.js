@@ -106,6 +106,38 @@ async function fileToBase64(file) {
   });
 }
 
+// Redimensiona uma imagem para caber em maxSide x maxSide (mantendo aspect ratio).
+// Retorna { base64, mimeType, width, height }. Usa Canvas — sem dependência externa.
+async function resizeImage(file, maxSide = 1536) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+  const img = await new Promise((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => resolve(im);
+    im.onerror = reject;
+    im.src = dataUrl;
+  });
+  let { width, height } = img;
+  if (Math.max(width, height) <= maxSide) {
+    // já é pequena, manda original
+    return { base64: dataUrl.split(',')[1], mimeType: file.type, width, height, resized: false };
+  }
+  const scale = maxSide / Math.max(width, height);
+  const w = Math.round(width * scale);
+  const h = Math.round(height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  const out = canvas.toDataURL('image/png');
+  return { base64: out.split(',')[1], mimeType: 'image/png', width: w, height: h, resized: true };
+}
+
 async function createRestaurant() {
   const name = $('nr-name').value.trim();
   if (!name) { alert('Informe um nome para o restaurante'); return; }
@@ -139,9 +171,11 @@ async function createWithAi({ name, apiKey, photo, prompt }) {
     createOk = true;
 
     // 2) Gera planta via OpenAI (pode demorar 1-2 min)
-    console.log('[create] convertendo foto para base64...', { size: photo.size, type: photo.type });
-    const imageBase64 = await fileToBase64(photo);
-    console.log('[create] base64 size:', imageBase64.length, 'chars');
+    console.log('[create] redimensionando foto se necessário...', { originalSize: photo.size, type: photo.type });
+    const resized = await resizeImage(photo, 1536);
+    console.log(`[create] foto pronta: ${resized.width}x${resized.height} | ${resized.resized ? 'redimensionada' : 'original'} | b64 ${resized.base64.length} chars`);
+    const imageBase64 = resized.base64;
+    const imageMime = resized.mimeType;
 
     const startedAt = Date.now();
     const updateTimer = () => {
@@ -155,7 +189,7 @@ async function createWithAi({ name, apiKey, photo, prompt }) {
     const r2 = await fetch(`${API}/restaurants/${newId}/planta/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey, imageBase64, mimeType: photo.type, prompt }),
+      body: JSON.stringify({ apiKey, imageBase64, mimeType: imageMime, prompt }),
     });
     clearInterval(timer); timer = null;
     const d2 = await r2.json();
