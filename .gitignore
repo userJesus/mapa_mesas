@@ -6,6 +6,10 @@ data/
 preview.*
 preview-*.*
 s3-*.*
+ai-*.png
+ai-*.jpeg
+*.tmp.*
+payload.json
 .DS_Store
 Thumbs.db
 .vscode/
