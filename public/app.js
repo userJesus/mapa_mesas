@@ -118,6 +118,8 @@ async function createRestaurant() {
 async function createWithAi({ name, apiKey, photo, prompt }) {
   setNrBusy(true, 'Criando restaurante…');
   let timer = null;
+  let newId = null;
+  let createOk = false;
   try {
     // 1) Cria o restaurante
     const r1 = await fetch(`${API}/restaurants`, {
@@ -127,7 +129,8 @@ async function createWithAi({ name, apiKey, photo, prompt }) {
     });
     const d1 = await r1.json();
     if (!r1.ok) throw new Error(d1.error || 'Erro ao criar');
-    const newId = d1.restaurant.id;
+    newId = d1.restaurant.id;
+    createOk = true;
 
     // 2) Gera planta via OpenAI (pode demorar 1-2 min)
     const startedAt = Date.now();
@@ -151,17 +154,27 @@ async function createWithAi({ name, apiKey, photo, prompt }) {
     } else {
       setStatus(`Restaurante "${name}" criado com planta gerada por IA`, 'success');
     }
-    await loadRestaurantsList();
-    activeRestaurantId = newId;
-    localStorage.setItem('activeRestaurantId', activeRestaurantId);
-    $('restaurant-select').value = activeRestaurantId;
-    closeNewRestaurantModal();
-    await refreshAll();
   } catch (e) {
     alert(`Erro: ${e.message}`);
   } finally {
     if (timer) clearInterval(timer);
     setNrBusy(false);
+    // Sempre fecha o modal, independente de qualquer erro posterior
+    closeNewRestaurantModal();
+  }
+
+  // Refresh fora do try/finally - se falhar, o modal já fechou
+  if (createOk && newId) {
+    activeRestaurantId = newId;
+    localStorage.setItem('activeRestaurantId', activeRestaurantId);
+    try {
+      await loadRestaurantsList();
+      const sel = $('restaurant-select');
+      if (sel) sel.value = activeRestaurantId;
+      await refreshAll();
+    } catch (e) {
+      setStatus(`Erro ao recarregar: ${e.message}`, 'error');
+    }
   }
 }
 
@@ -456,23 +469,35 @@ function setStatus(msg, type = '') {
   el.className = type;
 }
 
-// ---------- Eventos ----------
-$('clear-btn').addEventListener('click', releaseTable);
-$('edit-toggle-btn').addEventListener('click', enterEditMode);
-$('edit-save-btn').addEventListener('click', savePositions);
-$('edit-cancel-btn').addEventListener('click', cancelEditMode);
-$('edit-table-select').addEventListener('change', onEditTableSelectChange);
-$('edit-width').addEventListener('input', onDimensionInput);
-$('edit-height').addEventListener('input', onDimensionInput);
-$('restaurant-select').addEventListener('change', e => changeRestaurant(e.target.value));
-$('new-restaurant-btn').addEventListener('click', openNewRestaurantModal);
-$('delete-restaurant-btn').addEventListener('click', deleteCurrentRestaurant);
-$('nr-create-btn').addEventListener('click', createRestaurant);
-$('nr-cancel-btn').addEventListener('click', closeNewRestaurantModal);
-$('nr-close-x').addEventListener('click', closeNewRestaurantModal);
-document.querySelector('#new-restaurant-modal .modal-backdrop').addEventListener('click', closeNewRestaurantModal);
+// ---------- Eventos (null-safe) ----------
+function on(id, evt, fn) {
+  const el = $(id);
+  if (el) el.addEventListener(evt, fn);
+  else console.warn(`[init] elemento #${id} não encontrado — verifique se o HTML está atualizado`);
+}
+function onSel(sel, evt, fn) {
+  const el = document.querySelector(sel);
+  if (el) el.addEventListener(evt, fn);
+  else console.warn(`[init] elemento ${sel} não encontrado`);
+}
+
+on('clear-btn', 'click', releaseTable);
+on('edit-toggle-btn', 'click', enterEditMode);
+on('edit-save-btn', 'click', savePositions);
+on('edit-cancel-btn', 'click', cancelEditMode);
+on('edit-table-select', 'change', onEditTableSelectChange);
+on('edit-width', 'input', onDimensionInput);
+on('edit-height', 'input', onDimensionInput);
+on('restaurant-select', 'change', e => changeRestaurant(e.target.value));
+on('new-restaurant-btn', 'click', openNewRestaurantModal);
+on('delete-restaurant-btn', 'click', deleteCurrentRestaurant);
+on('nr-create-btn', 'click', createRestaurant);
+on('nr-cancel-btn', 'click', closeNewRestaurantModal);
+on('nr-close-x', 'click', closeNewRestaurantModal);
+onSel('#new-restaurant-modal .modal-backdrop', 'click', closeNewRestaurantModal);
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !$('new-restaurant-modal').hidden) closeNewRestaurantModal();
+  const modal = $('new-restaurant-modal');
+  if (e.key === 'Escape' && modal && !modal.hidden) closeNewRestaurantModal();
 });
 
 init();
