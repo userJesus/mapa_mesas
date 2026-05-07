@@ -659,8 +659,8 @@ The output must be ONE single piece of furniture (the table with its complete ch
     }
     try { fs.unlinkSync(rawPath); } catch (_) {}
 
-    const w = Number.isFinite(width) ? Math.max(40, Math.min(800, width)) : (shape === 'rect' ? 280 : 180);
-    const h = Number.isFinite(height) ? Math.max(40, Math.min(800, height)) : (shape === 'rect' ? 200 : 180);
+    const w = shape === 'rect' ? 280 : 180;
+    const h = shape === 'rect' ? 200 : 180;
     mesasCustom[id] = { id, label, shape, seats: seatsNum, file: `${id}.png`, w, h, createdAt: new Date().toISOString() };
     saveMesasCustom();
     mesaImages[id] = fs.readFileSync(finalPath).toString('base64');
