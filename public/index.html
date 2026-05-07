@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mapa de Mesas — Restaurante</title>
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
   <header>
@@ -45,7 +45,7 @@
         </div>
         <div id="edit-buttons-active" hidden>
           <label class="edit-field">
-            Mesa:
+            Mesa selecionada:
             <select id="edit-table-select"></select>
           </label>
           <div class="edit-dimensions">
@@ -58,7 +58,20 @@
               <input id="edit-height" type="number" min="20" max="800" step="1">
             </label>
           </div>
-          <button id="edit-save-btn">Salvar alterações</button>
+          <button id="edit-delete-btn" class="btn-danger">Excluir mesa selecionada</button>
+
+          <hr style="margin:14px 0;border:none;border-top:1px dashed rgba(60,40,20,0.18)">
+
+          <label class="edit-field">
+            Adicionar nova mesa:
+            <select id="add-mesa-type"></select>
+          </label>
+          <button id="add-mesa-btn" class="btn-secondary">+ Adicionar mesa ao salão</button>
+          <button id="open-gen-mesa-btn" class="btn-secondary" style="margin-top:6px">✨ Gerar novo modelo de mesa (IA)</button>
+
+          <hr style="margin:14px 0;border:none;border-top:1px dashed rgba(60,40,20,0.18)">
+
+          <button id="edit-save-btn">Salvar posições/escalas</button>
           <button id="edit-cancel-btn" class="btn-secondary">Cancelar</button>
         </div>
       </div>
@@ -123,6 +136,48 @@
     </div>
   </div>
 
-  <script src="app.js?v=7"></script>
+  <!-- Modal: gerar nova mesa (IA + rembg) -->
+  <div id="gen-mesa-modal" class="modal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <button id="gm-close-x" class="modal-close" aria-label="Fechar">×</button>
+      <h2>Gerar novo modelo de mesa</h2>
+      <p class="hint" style="margin-top:6px">A IA gera a mesa com fundo branco e o backend remove o fundo automaticamente (rembg / U2-Net, gratuito).</p>
+
+      <label class="edit-field">
+        Nome / descrição
+        <input id="gm-label" type="text" placeholder="Ex.: Mesa rústica oval com 6 cadeiras de palhinha">
+      </label>
+      <label class="edit-field">
+        Sua chave OpenAI (não é armazenada)
+        <input id="gm-api-key" type="password" placeholder="sk-...">
+      </label>
+      <label class="edit-field">
+        Prompt completo (opcional — se vazio, usa um prompt padrão com o nome acima)
+        <textarea id="gm-prompt" rows="3" placeholder="Vista de cima de uma mesa redonda de madeira escura com 4 cadeiras de palhinha..."></textarea>
+      </label>
+      <div class="edit-dimensions">
+        <label class="edit-field">
+          Largura padrão (px)
+          <input id="gm-w" type="number" min="40" max="800" step="1" value="200">
+        </label>
+        <label class="edit-field">
+          Altura padrão (px)
+          <input id="gm-h" type="number" min="40" max="800" step="1" value="200">
+        </label>
+      </div>
+
+      <div id="gm-progress" class="nr-progress" hidden>
+        <div class="spinner"></div>
+        <span id="gm-progress-text">Gerando…</span>
+      </div>
+      <div class="modal-buttons">
+        <button id="gm-create-btn">Gerar</button>
+        <button id="gm-cancel-btn" class="btn-secondary">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=8"></script>
 </body>
 </html>

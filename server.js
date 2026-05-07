@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 const { Resvg } = require('@resvg/resvg-js');
 const jpegJs = require('jpeg-js');
 
@@ -16,16 +17,60 @@ app.use(express.static(path.join(__dirname, 'public')));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const RESTAURANTS_FILE = path.join(DATA_DIR, 'restaurants.json');
 const PLANTAS_DIR = path.join(DATA_DIR, 'plantas');
+const MESAS_CUSTOM_DIR = path.join(DATA_DIR, 'mesas-custom');
+const MESAS_CUSTOM_FILE = path.join(DATA_DIR, 'mesas-custom.json');
 const ASSETS_DIR = path.join(__dirname, 'assets');
 const MESAS_DIR = path.join(ASSETS_DIR, 'mesas');
+const SCRIPTS_DIR = path.join(__dirname, 'scripts');
 const FONT_DIR = path.join(__dirname, 'fonts');
 const FALLBACK_PLANTA = path.join(ASSETS_DIR, 'planta.png');
+const PYTHON_BIN = process.env.PYTHON_BIN || 'python';
 
 const CANVAS_W = 1448, CANVAS_H = 1086;
 
 function ensureDirs() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(PLANTAS_DIR)) fs.mkdirSync(PLANTAS_DIR, { recursive: true });
+  if (!fs.existsSync(MESAS_CUSTOM_DIR)) fs.mkdirSync(MESAS_CUSTOM_DIR, { recursive: true });
+}
+
+// ---------- Mesas customizadas (geradas por IA) ----------
+let mesasCustom = {}; // id -> { id, label, file, w, h, createdAt }
+
+function loadMesasCustom() {
+  ensureDirs();
+  try {
+    if (fs.existsSync(MESAS_CUSTOM_FILE)) {
+      mesasCustom = JSON.parse(fs.readFileSync(MESAS_CUSTOM_FILE, 'utf8'));
+    }
+  } catch (e) { console.error('mesas-custom:', e.message); mesasCustom = {}; }
+  // Carrega base64 das custom em mesaImages
+  for (const id of Object.keys(mesasCustom)) {
+    const f = path.join(MESAS_CUSTOM_DIR, mesasCustom[id].file);
+    if (fs.existsSync(f)) mesaImages[id] = fs.readFileSync(f).toString('base64');
+  }
+}
+
+function saveMesasCustom() {
+  ensureDirs();
+  fs.writeFileSync(MESAS_CUSTOM_FILE, JSON.stringify(mesasCustom, null, 2));
+}
+
+function runRembg(input, output) {
+  return new Promise((resolve, reject) => {
+    const py = spawn(PYTHON_BIN, [path.join(SCRIPTS_DIR, 'rembg_run.py'), input, output]);
+    let stderr = '';
+    py.stderr.on('data', d => { stderr += d.toString(); });
+    py.on('close', code => {
+      if (code === 0) resolve();
+      else reject(new Error(`rembg exit ${code}: ${stderr.slice(0, 500)}`));
+    });
+    py.on('error', e => reject(e));
+  });
+}
+
+function generateMesaId() {
+  return 'custom_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
 // ---------- Imagens base ----------
@@ -49,6 +94,14 @@ const MESA_TYPES = {
   rect_8:   { img: 4, w: 265, h: 170 },
 };
 const layoutKey = t => `${t.shape}_${t.seats}`;
+
+function getTableLayout(t) {
+  if (t.shape === 'custom' && t.mesaId && mesasCustom[t.mesaId]) {
+    const m = mesasCustom[t.mesaId];
+    return { img: t.mesaId, w: m.w || 200, h: m.h || 200 };
+  }
+  return MESA_TYPES[layoutKey(t)];
+}
 
 // Template de mesas usado ao criar qualquer novo restaurante
 const DEFAULT_TABLES = [
@@ -145,9 +198,10 @@ function generateId() {
 
 // ---------- SVG ----------
 function defs() {
-  return `<defs>${Object.entries(mesaImages).map(([n, b64]) =>
-    `<symbol id="mesa${n}" viewBox="0 0 800 800"><image href="data:image/png;base64,${b64}" width="800" height="800" preserveAspectRatio="xMidYMid meet"/></symbol>`
-  ).join('')}</defs>`;
+  return `<defs>${Object.entries(mesaImages).map(([n, b64]) => {
+    const symbolId = `mesa${n}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `<symbol id="${symbolId}" viewBox="0 0 800 800"><image href="data:image/png;base64,${b64}" width="800" height="800" preserveAspectRatio="xMidYMid meet"/></symbol>`;
+  }).join('')}</defs>`;
 }
 
 function getPlantaForRestaurant(r) {
@@ -173,15 +227,16 @@ function background(r) {
 }
 
 function tableSvg(t) {
-  const layout = MESA_TYPES[layoutKey(t)];
+  const layout = getTableLayout(t);
   if (!layout || !mesaImages[layout.img]) return '';
   const opacity = t.status === 'available' ? 1 : 0.4;
   const labelColor = t.status === 'available' ? '#1c1917' : '#dc2626';
   const sx = t.scaleX ?? 1;
   const sy = t.scaleY ?? 1;
   const scalePart = (sx === 1 && sy === 1) ? '' : ` scale(${sx}, ${sy})`;
+  const symbolId = `mesa${layout.img}`.replace(/[^a-zA-Z0-9_-]/g, '_');
   return `<g class="table-group ${t.status}" data-table-id="${t.id}" data-base-w="${layout.w}" data-base-h="${layout.h}" transform="translate(${t.x}, ${t.y})${scalePart}">
-    <use href="#mesa${layout.img}" x="${-layout.w / 2}" y="${-layout.h / 2}" width="${layout.w}" height="${layout.h}" opacity="${opacity}"/>
+    <use href="#${symbolId}" x="${-layout.w / 2}" y="${-layout.h / 2}" width="${layout.w}" height="${layout.h}" opacity="${opacity}"/>
     <text x="0" y="5" text-anchor="middle" font-family="Roboto, Arial, sans-serif" font-size="15" font-weight="700" fill="${labelColor}" stroke="#fdf6e3" stroke-width="3.5" paint-order="stroke" pointer-events="none">Mesa ${t.id}</text>
   </g>`;
 }
@@ -449,6 +504,120 @@ VISUAL STYLE OF THE OUTPUT (always — do not match the input style):
   }
 });
 
+// ---------- Catálogo de tipos de mesa (built-in + custom) ----------
+app.get('/api/mesas', (req, res) => {
+  const builtin = [
+    { id: 'round_2',  label: 'Redonda · 2 lugares',  w: MESA_TYPES.round_2.w,  h: MESA_TYPES.round_2.h,  builtin: true },
+    { id: 'round_4',  label: 'Redonda · 4 lugares',  w: MESA_TYPES.round_4.w,  h: MESA_TYPES.round_4.h,  builtin: true },
+    { id: 'square_4', label: 'Quadrada · 4 lugares', w: MESA_TYPES.square_4.w, h: MESA_TYPES.square_4.h, builtin: true },
+    { id: 'rect_6',   label: 'Retangular · 6 lugares', w: MESA_TYPES.rect_6.w,   h: MESA_TYPES.rect_6.h,   builtin: true },
+    { id: 'rect_8',   label: 'Retangular · 8 lugares', w: MESA_TYPES.rect_8.w,   h: MESA_TYPES.rect_8.h,   builtin: true },
+  ];
+  const custom = Object.values(mesasCustom).map(m => ({ ...m, builtin: false }));
+  res.json({ mesas: [...builtin, ...custom] });
+});
+
+app.delete('/api/mesas/:id', (req, res) => {
+  const id = req.params.id;
+  if (!mesasCustom[id]) return res.status(404).json({ error: 'Mesa custom não encontrada' });
+  // Apaga arquivo e cache
+  const file = path.join(MESAS_CUSTOM_DIR, mesasCustom[id].file);
+  if (fs.existsSync(file)) fs.unlinkSync(file);
+  delete mesasCustom[id];
+  delete mesaImages[id];
+  saveMesasCustom();
+  res.json({ message: 'Mesa removida' });
+});
+
+// Gera mesa via OpenAI (text-to-image) + remove fundo via rembg
+app.post('/api/mesas/generate', async (req, res) => {
+  const { apiKey, label, prompt, width, height } = req.body || {};
+  if (!apiKey) return res.status(400).json({ error: 'apiKey é obrigatória' });
+  if (!label || typeof label !== 'string') return res.status(400).json({ error: 'label é obrigatório' });
+
+  const defaultPrompt = `Top-down (bird's eye) view of a single restaurant table with chairs around it.
+Centered composition. Solid pure white background (#FFFFFF), no shadow on the floor, no decoration around.
+Wood-tone realistic illustration of the furniture.
+${label}`;
+  const fullPrompt = (typeof prompt === 'string' && prompt.trim()) ? prompt : defaultPrompt;
+
+  try {
+    console.log('[mesa-gen] OpenAI gerando…');
+    const r = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'gpt-image-2', prompt: fullPrompt, size: '1024x1024', n: 1, background: 'opaque' }),
+    });
+    const data = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: data.error?.message || `OpenAI HTTP ${r.status}` });
+    const b64 = data.data?.[0]?.b64_json;
+    if (!b64) return res.status(500).json({ error: 'Resposta inesperada da OpenAI' });
+
+    ensureDirs();
+    const id = generateMesaId();
+    const rawPath = path.join(MESAS_CUSTOM_DIR, `${id}_raw.png`);
+    const finalPath = path.join(MESAS_CUSTOM_DIR, `${id}.png`);
+    fs.writeFileSync(rawPath, Buffer.from(b64, 'base64'));
+
+    console.log('[mesa-gen] removendo fundo via rembg…');
+    try {
+      await runRembg(rawPath, finalPath);
+    } catch (e) {
+      console.warn('[mesa-gen] rembg falhou — usando imagem com fundo branco:', e.message);
+      fs.copyFileSync(rawPath, finalPath);
+    }
+    try { fs.unlinkSync(rawPath); } catch (_) {}
+
+    const w = Number.isFinite(width) ? Math.max(40, Math.min(800, width)) : 200;
+    const h = Number.isFinite(height) ? Math.max(40, Math.min(800, height)) : 200;
+    mesasCustom[id] = { id, label, file: `${id}.png`, w, h, createdAt: new Date().toISOString() };
+    saveMesasCustom();
+    mesaImages[id] = fs.readFileSync(finalPath).toString('base64');
+
+    res.json({ mesa: { ...mesasCustom[id], builtin: false } });
+  } catch (e) {
+    console.error('[mesa-gen] erro:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// CRUD de mesas no restaurante (sem limite de quantidade)
+app.post('/api/restaurants/:id/tables', requireRestaurant, (req, res) => {
+  const r = req.restaurant;
+  const { mesaTypeKey, x, y } = req.body || {};
+  if (!mesaTypeKey) return res.status(400).json({ error: 'mesaTypeKey é obrigatório' });
+
+  const maxId = r.tables.reduce((m, t) => Math.max(m, t.id), 0);
+  const id = maxId + 1;
+  let table;
+  if (MESA_TYPES[mesaTypeKey]) {
+    const [shape, seats] = mesaTypeKey.split('_');
+    table = { id, shape, seats: parseInt(seats, 10), area: 'salao',
+      x: Number.isFinite(x) ? x : 700, y: Number.isFinite(y) ? y : 540,
+      status: 'available', scaleX: 1, scaleY: 1 };
+  } else if (mesasCustom[mesaTypeKey]) {
+    table = { id, shape: 'custom', mesaId: mesaTypeKey, area: 'salao',
+      x: Number.isFinite(x) ? x : 700, y: Number.isFinite(y) ? y : 540,
+      status: 'available', scaleX: 1, scaleY: 1 };
+  } else {
+    return res.status(400).json({ error: `Tipo de mesa "${mesaTypeKey}" não encontrado` });
+  }
+  r.tables.push(table);
+  saveRestaurants();
+  res.status(201).json({ table });
+});
+
+app.delete('/api/restaurants/:id/tables/:tableId', requireRestaurant, (req, res) => {
+  const r = req.restaurant;
+  const tableId = parseInt(req.params.tableId, 10);
+  const idx = r.tables.findIndex(t => t.id === tableId);
+  if (idx < 0) return res.status(404).json({ error: `Mesa ${tableId} não encontrada` });
+  r.tables.splice(idx, 1);
+  if (r.currentSelection?.tableId === tableId) r.currentSelection = null;
+  saveRestaurants();
+  res.json({ message: `Mesa ${tableId} removida` });
+});
+
 // ---------- Rotas scoped por restaurante ----------
 app.get('/api/restaurants/:id/tables', requireRestaurant, H.list);
 app.post('/api/restaurants/:id/tables/select', requireRestaurant, H.select);
@@ -472,4 +641,5 @@ app.get('/api/tables/image.png', defaultRestaurant, H.imagePng);
 app.get(['/api/tables/image.jpeg', '/api/tables/image.jpg'], defaultRestaurant, H.imageJpeg);
 
 loadRestaurants();
+loadMesasCustom();
 app.listen(PORT, () => console.log(`Restaurant API rodando em http://localhost:${PORT}`));

@@ -4,6 +4,7 @@ let restaurantsList = [];
 let activeRestaurantId = null;
 let tables = [];
 let currentSelection = null;
+let mesaTypes = []; // [{id, label, w, h, builtin}]
 
 // Estado do modo Reposicionar
 let editMode = false;
@@ -229,6 +230,23 @@ async function loadData() {
   currentSelection = data.currentSelection;
 }
 
+async function loadMesaTypes() {
+  try {
+    const res = await fetch(`${API}/mesas`);
+    const data = await res.json();
+    mesaTypes = data.mesas || [];
+    populateAddMesaSelect();
+  } catch (e) { console.warn('mesas:', e.message); }
+}
+
+function populateAddMesaSelect() {
+  const sel = $('add-mesa-type');
+  if (!sel) return;
+  sel.innerHTML = mesaTypes.map(m =>
+    `<option value="${m.id}">${m.builtin ? '' : '✨ '}${m.label}</option>`
+  ).join('');
+}
+
 // ---------- Modo seleção ----------
 function attachClickHandlers() {
   document.querySelectorAll('#map-container .table-group').forEach(g => {
@@ -398,6 +416,7 @@ function enterEditMode() {
   $('edit-buttons-idle').hidden = true;
   $('edit-buttons-active').hidden = false;
   populateEditSelect();
+  loadMesaTypes(); // tipos disponíveis pro botão de adicionar
   editingTableId = tables[0]?.id ?? null;
   if (editingTableId) {
     $('edit-table-select').value = String(editingTableId);
@@ -405,6 +424,116 @@ function enterEditMode() {
   }
   attachDragHandlers();
   setStatus('Modo Reposicionar — arraste, scroll ou edite largura/altura', '');
+}
+
+async function addMesaToRestaurant() {
+  const sel = $('add-mesa-type');
+  const mesaTypeKey = sel?.value;
+  if (!mesaTypeKey) return;
+  // Salva pendentes antes (pra não perder)
+  if (Object.keys(pendingPositions).length || Object.keys(pendingScales).length) {
+    if (!confirm('Você tem alterações pendentes não salvas. Salvar antes de adicionar a nova mesa?')) return;
+    await savePositions();
+    enterEditMode();
+  }
+  try {
+    const res = await fetch(`${apiRoot()}/tables`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mesaTypeKey, x: 700, y: 540 }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro');
+    setStatus(`Mesa ${data.table.id} adicionada — arraste pra posicioná-la`, 'success');
+    await loadData();
+    await loadFloorplan();
+    populateEditSelect();
+    attachDragHandlers();
+    editingTableId = data.table.id;
+    $('edit-table-select').value = String(editingTableId);
+    syncDimensionInputs(editingTableId);
+  } catch (e) { setStatus(e.message, 'error'); }
+}
+
+async function deleteSelectedTable() {
+  if (!editingTableId) return;
+  if (!confirm(`Excluir Mesa ${editingTableId}?`)) return;
+  try {
+    const res = await fetch(`${apiRoot()}/tables/${editingTableId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro');
+    setStatus(`Mesa ${editingTableId} removida`, 'success');
+    delete pendingPositions[editingTableId];
+    delete pendingScales[editingTableId];
+    await loadData();
+    await loadFloorplan();
+    populateEditSelect();
+    attachDragHandlers();
+    editingTableId = tables[0]?.id ?? null;
+    if (editingTableId) {
+      $('edit-table-select').value = String(editingTableId);
+      syncDimensionInputs(editingTableId);
+    }
+  } catch (e) { setStatus(e.message, 'error'); }
+}
+
+// ---------- Modal: gerar nova mesa via IA + rembg ----------
+function openGenMesaModal() {
+  $('gm-label').value = '';
+  $('gm-api-key').value = '';
+  $('gm-prompt').value = '';
+  $('gm-w').value = 200;
+  $('gm-h').value = 200;
+  $('gm-progress').hidden = true;
+  $('gm-create-btn').disabled = false;
+  $('gen-mesa-modal').hidden = false;
+  $('gm-label').focus();
+}
+function closeGenMesaModal() { $('gen-mesa-modal').hidden = true; }
+
+async function generateMesa() {
+  const label = $('gm-label').value.trim();
+  const apiKey = $('gm-api-key').value.trim();
+  const prompt = $('gm-prompt').value.trim();
+  const width = parseInt($('gm-w').value, 10);
+  const height = parseInt($('gm-h').value, 10);
+  if (!label) { alert('Informe um nome'); return; }
+  if (!apiKey) { alert('Informe a chave OpenAI'); return; }
+  setGmBusy(true, 'Gerando imagem com OpenAI…');
+  let timer = null;
+  const startedAt = Date.now();
+  const tick = () => setGmBusy(true, `Gerando + removendo fundo… ${Math.round((Date.now()-startedAt)/1000)}s`);
+  tick();
+  timer = setInterval(tick, 1000);
+  try {
+    const res = await fetch(`${API}/mesas/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey, label, prompt, width, height }),
+    });
+    clearInterval(timer); timer = null;
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro');
+    setStatus(`Modelo "${label}" gerado e disponível`, 'success');
+    closeGenMesaModal();
+    await loadMesaTypes();
+    // Sugere o novo modelo no dropdown de adicionar
+    if (data.mesa?.id) {
+      const sel = $('add-mesa-type');
+      if (sel) sel.value = data.mesa.id;
+    }
+  } catch (e) {
+    alert(`Erro: ${e.message}`);
+  } finally {
+    if (timer) clearInterval(timer);
+    setGmBusy(false);
+  }
+}
+
+function setGmBusy(busy, msg = '') {
+  $('gm-create-btn').disabled = busy;
+  $('gm-progress').hidden = !busy;
+  if (msg) $('gm-progress-text').textContent = msg;
 }
 
 function exitEditMode() {
@@ -511,6 +640,13 @@ on('nr-create-btn', 'click', createRestaurant);
 on('nr-cancel-btn', 'click', closeNewRestaurantModal);
 on('nr-close-x', 'click', closeNewRestaurantModal);
 onSel('#new-restaurant-modal .modal-backdrop', 'click', closeNewRestaurantModal);
+on('add-mesa-btn', 'click', addMesaToRestaurant);
+on('edit-delete-btn', 'click', deleteSelectedTable);
+on('open-gen-mesa-btn', 'click', openGenMesaModal);
+on('gm-create-btn', 'click', generateMesa);
+on('gm-cancel-btn', 'click', closeGenMesaModal);
+on('gm-close-x', 'click', closeGenMesaModal);
+onSel('#gen-mesa-modal .modal-backdrop', 'click', closeGenMesaModal);
 document.addEventListener('keydown', e => {
   const modal = $('new-restaurant-modal');
   if (e.key === 'Escape' && modal && !modal.hidden) closeNewRestaurantModal();
