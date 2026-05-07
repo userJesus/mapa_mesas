@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mapa de Mesas — Restaurante</title>
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
   <header>
@@ -144,28 +144,37 @@
       <h2>Gerar novo modelo de mesa</h2>
       <p class="hint" style="margin-top:6px">A IA gera a mesa com fundo branco e o backend remove o fundo automaticamente (rembg / U2-Net, gratuito).</p>
 
+      <div class="edit-dimensions">
+        <label class="edit-field">
+          Formato
+          <select id="gm-shape">
+            <option value="round">Redonda</option>
+            <option value="square">Quadrada</option>
+            <option value="rect">Retangular</option>
+          </select>
+        </label>
+        <label class="edit-field">
+          Lugares
+          <select id="gm-seats">
+            <option value="2">2 cadeiras</option>
+            <option value="4" selected>4 cadeiras</option>
+            <option value="6">6 cadeiras</option>
+            <option value="8">8 cadeiras</option>
+            <option value="10">10 cadeiras</option>
+          </select>
+        </label>
+      </div>
+
       <label class="edit-field">
-        Nome / descrição
-        <input id="gm-label" type="text" placeholder="Ex.: Mesa rústica oval com 6 cadeiras de palhinha">
+        Estilo (opcional)
+        <input id="gm-style" type="text" placeholder="Ex.: madeira escura rústica, metal industrial, mármore branco, palhinha...">
       </label>
+      <p class="hint" style="margin-top:-4px">Se vazio, a IA usará a planta atual como referência de estilo.</p>
+
       <label class="edit-field">
         Sua chave OpenAI (não é armazenada)
         <input id="gm-api-key" type="password" placeholder="sk-...">
       </label>
-      <label class="edit-field">
-        Prompt completo (opcional — se vazio, usa um prompt padrão com o nome acima)
-        <textarea id="gm-prompt" rows="3" placeholder="Vista de cima de uma mesa redonda de madeira escura com 4 cadeiras de palhinha..."></textarea>
-      </label>
-      <div class="edit-dimensions">
-        <label class="edit-field">
-          Largura padrão (px)
-          <input id="gm-w" type="number" min="40" max="800" step="1" value="200">
-        </label>
-        <label class="edit-field">
-          Altura padrão (px)
-          <input id="gm-h" type="number" min="40" max="800" step="1" value="200">
-        </label>
-      </div>
 
       <div id="gm-progress" class="nr-progress" hidden>
         <div class="spinner"></div>
@@ -178,6 +187,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

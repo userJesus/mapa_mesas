@@ -529,26 +529,96 @@ app.delete('/api/mesas/:id', (req, res) => {
   res.json({ message: 'Mesa removida' });
 });
 
-// Gera mesa via OpenAI (text-to-image) + remove fundo via rembg
+// Gera mesa via OpenAI + remove fundo via rembg
+// Body:
+//  - apiKey: chave OpenAI (obrigatória)
+//  - shape: 'round' | 'square' | 'rect'
+//  - seats: número de cadeiras (1..20)
+//  - style: estilo descrito pelo usuário (opcional)
+//  - restaurantId: pra usar a planta como referência quando style está vazio (opcional)
 app.post('/api/mesas/generate', async (req, res) => {
-  const { apiKey, label, prompt, width, height } = req.body || {};
+  const { apiKey, shape, seats, style, restaurantId, width, height } = req.body || {};
   if (!apiKey) return res.status(400).json({ error: 'apiKey é obrigatória' });
-  if (!label || typeof label !== 'string') return res.status(400).json({ error: 'label é obrigatório' });
+  if (!['round', 'square', 'rect'].includes(shape)) return res.status(400).json({ error: 'shape deve ser round, square ou rect' });
+  const seatsNum = parseInt(seats, 10);
+  if (!Number.isFinite(seatsNum) || seatsNum < 1 || seatsNum > 20) return res.status(400).json({ error: 'seats deve ser entre 1 e 20' });
 
-  const defaultPrompt = `Top-down (bird's eye) view of a single restaurant table with chairs around it.
-Centered composition. Solid pure white background (#FFFFFF), no shadow on the floor, no decoration around.
-Wood-tone realistic illustration of the furniture.
-${label}`;
-  const fullPrompt = (typeof prompt === 'string' && prompt.trim()) ? prompt : defaultPrompt;
+  const shapeLabelPt = shape === 'round' ? 'Redonda' : shape === 'square' ? 'Quadrada' : 'Retangular';
+  const shapeLabelEn = shape === 'round' ? 'round' : shape === 'square' ? 'square' : 'rectangular';
+  const label = `${shapeLabelPt} · ${seatsNum} lugar${seatsNum > 1 ? 'es' : ''}`;
+
+  const userStyle = (style || '').trim();
+
+  // Decide se usa a planta como referência (apenas se sem estilo descrito)
+  let plantaRefBuf = null;
+  let plantaRefMime = null;
+  if (!userStyle && restaurantId) {
+    const r = restaurants[restaurantId];
+    if (r) {
+      const planta = getPlantaForRestaurant(r);
+      if (planta) {
+        plantaRefBuf = Buffer.from(planta.b64, 'base64');
+        plantaRefMime = planta.mime;
+      }
+    }
+  }
+
+  // Monta o prompt
+  const composition = shape === 'rect' ? 'rectangular 3:2' : 'square 1:1';
+  const stylePart = userStyle
+    ? `STYLE: ${userStyle}.`
+    : (plantaRefBuf
+      ? `STYLE: match the wood tone, color palette and overall aesthetic of the reference restaurant interior image. Use the same furniture style.`
+      : `STYLE: realistic illustration of warm wooden restaurant furniture, similar to a high-end real estate rendering.`);
+
+  const fullPrompt = `Generate a single restaurant ${shapeLabelEn} table with EXACTLY ${seatsNum} chairs around it.
+
+VIEW & COMPOSITION:
+- Strictly TOP-DOWN (bird's eye view), looking straight down at the table from above.
+- Centered composition, ${composition} layout.
+- The table fills most of the central area; chairs are around the perimeter.
+
+CHAIRS — must be exactly ${seatsNum}:
+${shape === 'round' ? `- Around a round table, distribute the ${seatsNum} chairs evenly along the circumference.`
+: shape === 'square' ? `- Around a square table, distribute the ${seatsNum} chairs symmetrically (typically 1 per side or 2 per side).`
+: `- Around a rectangular table, place most chairs along the long sides, plus one chair at each short end if seats > 4.`}
+- All chairs identical, with backrests pointing OUTWARD (away from the table).
+- Render the chairs realistically (seat + backrest visible from above).
+
+BACKGROUND:
+- Solid pure white background (#FFFFFF) outside the furniture.
+- No room context, no walls, no shadows on the floor, no other objects, no decoration.
+- ONLY the table and chairs visible.
+
+${stylePart}
+
+The output must be ONE single piece of furniture (the table with its chairs) on a clean white background.`;
 
   try {
-    console.log('[mesa-gen] OpenAI gerando…');
-    const r = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'gpt-image-2', prompt: fullPrompt, size: '1024x1024', n: 1, background: 'opaque' }),
-    });
-    const data = await r.json();
+    console.log(`[mesa-gen] ${label} | style="${userStyle || '(planta-ref)'}" | usando ${plantaRefBuf ? '/edits com planta' : '/generations'}`);
+    let r, data;
+    if (plantaRefBuf) {
+      // /v1/images/edits com a planta como referência
+      const blob = new Blob([plantaRefBuf], { type: plantaRefMime || 'image/png' });
+      const form = new FormData();
+      form.append('image', blob, 'planta.png');
+      form.append('model', 'gpt-image-2');
+      form.append('prompt', fullPrompt);
+      form.append('size', '1024x1024');
+      form.append('n', '1');
+      r = await fetch('https://api.openai.com/v1/images/edits', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+        body: form,
+      });
+    } else {
+      r = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: 'gpt-image-2', prompt: fullPrompt, size: '1024x1024', n: 1, background: 'opaque' }),
+      });
+    }
+    data = await r.json();
     if (!r.ok) return res.status(r.status).json({ error: data.error?.message || `OpenAI HTTP ${r.status}` });
     const b64 = data.data?.[0]?.b64_json;
     if (!b64) return res.status(500).json({ error: 'Resposta inesperada da OpenAI' });
@@ -568,9 +638,9 @@ ${label}`;
     }
     try { fs.unlinkSync(rawPath); } catch (_) {}
 
-    const w = Number.isFinite(width) ? Math.max(40, Math.min(800, width)) : 200;
-    const h = Number.isFinite(height) ? Math.max(40, Math.min(800, height)) : 200;
-    mesasCustom[id] = { id, label, file: `${id}.png`, w, h, createdAt: new Date().toISOString() };
+    const w = Number.isFinite(width) ? Math.max(40, Math.min(800, width)) : (shape === 'rect' ? 280 : 180);
+    const h = Number.isFinite(height) ? Math.max(40, Math.min(800, height)) : (shape === 'rect' ? 200 : 180);
+    mesasCustom[id] = { id, label, shape, seats: seatsNum, file: `${id}.png`, w, h, createdAt: new Date().toISOString() };
     saveMesasCustom();
     mesaImages[id] = fs.readFileSync(finalPath).toString('base64');
 

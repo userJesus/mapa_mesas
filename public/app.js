@@ -479,26 +479,25 @@ async function deleteSelectedTable() {
 
 // ---------- Modal: gerar nova mesa via IA + rembg ----------
 function openGenMesaModal() {
-  $('gm-label').value = '';
+  $('gm-shape').value = 'round';
+  $('gm-seats').value = '4';
+  $('gm-style').value = '';
   $('gm-api-key').value = '';
-  $('gm-prompt').value = '';
-  $('gm-w').value = 200;
-  $('gm-h').value = 200;
   $('gm-progress').hidden = true;
   $('gm-create-btn').disabled = false;
   $('gen-mesa-modal').hidden = false;
-  $('gm-label').focus();
+  $('gm-style').focus();
 }
 function closeGenMesaModal() { $('gen-mesa-modal').hidden = true; }
 
 async function generateMesa() {
-  const label = $('gm-label').value.trim();
+  const shape = $('gm-shape').value;
+  const seats = parseInt($('gm-seats').value, 10);
+  const style = $('gm-style').value.trim();
   const apiKey = $('gm-api-key').value.trim();
-  const prompt = $('gm-prompt').value.trim();
-  const width = parseInt($('gm-w').value, 10);
-  const height = parseInt($('gm-h').value, 10);
-  if (!label) { alert('Informe um nome'); return; }
   if (!apiKey) { alert('Informe a chave OpenAI'); return; }
+  if (!Number.isFinite(seats)) { alert('Selecione o número de lugares'); return; }
+
   setGmBusy(true, 'Gerando imagem com OpenAI…');
   let timer = null;
   const startedAt = Date.now();
@@ -509,15 +508,14 @@ async function generateMesa() {
     const res = await fetch(`${API}/mesas/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey, label, prompt, width, height }),
+      body: JSON.stringify({ apiKey, shape, seats, style, restaurantId: activeRestaurantId }),
     });
     clearInterval(timer); timer = null;
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erro');
-    setStatus(`Modelo "${label}" gerado e disponível`, 'success');
+    setStatus(`Modelo "${data.mesa.label}" gerado e disponível`, 'success');
     closeGenMesaModal();
     await loadMesaTypes();
-    // Sugere o novo modelo no dropdown de adicionar
     if (data.mesa?.id) {
       const sel = $('add-mesa-type');
       if (sel) sel.value = data.mesa.id;
