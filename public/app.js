@@ -117,6 +117,7 @@ async function createRestaurant() {
 
 async function createWithAi({ name, apiKey, photo, prompt }) {
   setNrBusy(true, 'Criando restaurante…');
+  let timer = null;
   try {
     // 1) Cria o restaurante
     const r1 = await fetch(`${API}/restaurants`, {
@@ -128,17 +129,24 @@ async function createWithAi({ name, apiKey, photo, prompt }) {
     if (!r1.ok) throw new Error(d1.error || 'Erro ao criar');
     const newId = d1.restaurant.id;
 
-    // 2) Gera planta via OpenAI
-    setNrBusy(true, 'Gerando planta com OpenAI (pode levar 1–2 min)…');
+    // 2) Gera planta via OpenAI (pode demorar 1-2 min)
+    const startedAt = Date.now();
+    const updateTimer = () => {
+      const sec = Math.round((Date.now() - startedAt) / 1000);
+      setNrBusy(true, `Gerando planta com OpenAI… ${sec}s (típico 60–90s)`);
+    };
+    updateTimer();
+    timer = setInterval(updateTimer, 1000);
+
     const imageBase64 = await fileToBase64(photo);
     const r2 = await fetch(`${API}/restaurants/${newId}/planta/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ apiKey, imageBase64, mimeType: photo.type, prompt }),
     });
+    clearInterval(timer); timer = null;
     const d2 = await r2.json();
     if (!r2.ok) {
-      // Restaurante já criado mas geração falhou — mantém o restaurante com planta default
       setStatus(`Restaurante criado, mas geração falhou: ${d2.error}`, 'error');
     } else {
       setStatus(`Restaurante "${name}" criado com planta gerada por IA`, 'success');
@@ -151,7 +159,10 @@ async function createWithAi({ name, apiKey, photo, prompt }) {
     await refreshAll();
   } catch (e) {
     alert(`Erro: ${e.message}`);
-  } finally { setNrBusy(false); }
+  } finally {
+    if (timer) clearInterval(timer);
+    setNrBusy(false);
+  }
 }
 
 function setNrBusy(busy, msg = '') {
